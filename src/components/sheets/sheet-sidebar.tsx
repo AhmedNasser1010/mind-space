@@ -41,10 +41,7 @@ interface SheetTabItemProps {
   onStartRename: (id: string, title: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
-  onDragStart: (id: string) => void;
-  onDragOver: (id: string, e: React.DragEvent<HTMLDivElement>) => void;
-  onDragEnd: () => void;
-  onDrop: (id: string) => void;
+  onPointerDown: (e: React.PointerEvent, sheetId: string) => void;
   inputRef: RefObject<HTMLInputElement | null>;
   editValue: string;
   onEditValueChange: (value: string) => void;
@@ -60,10 +57,7 @@ const SheetTabItem = memo(function SheetTabItem({
   onStartRename,
   onDuplicate,
   onDelete,
-  onDragStart,
-  onDragOver,
-  onDragEnd,
-  onDrop,
+  onPointerDown,
   inputRef,
   editValue,
   onEditValueChange,
@@ -156,17 +150,11 @@ const SheetTabItem = memo(function SheetTabItem({
           : "text-muted-foreground hover:bg-accent/50 hover:text-foreground border-t-2 border-t-transparent",
         isDragging && "opacity-40",
       )}
-      draggable={!isEditing}
-      aria-grabbed={isDragging}
-      onDragStart={(e) => {
+      data-sheet-id={sheet.id}
+      onPointerDown={(e) => {
         if (isEditing) return;
-        onDragStart(sheet.id);
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", sheet.id);
+        onPointerDown(e, sheet.id);
       }}
-      onDragOver={(e) => onDragOver(sheet.id, e)}
-      onDragEnd={onDragEnd}
-      onDrop={() => onDrop(sheet.id)}
       onClick={() => {
         setActionsOpen(false);
         onSelect();
@@ -297,6 +285,10 @@ export const SheetSidebar = memo(function SheetSidebar() {
     id: string;
     position: "before" | "after";
   } | null>(null);
+  const dragState = useRef({
+    draggingId: null as string | null,
+    dropTarget: null as { id: string; position: "before" | "after" } | null,
+  });
 
   useEffect(() => {
     if (editingId && inputRef.current) {
@@ -387,38 +379,72 @@ export const SheetSidebar = memo(function SheetSidebar() {
     [duplicateSheet, addToast],
   );
 
-  const handleDragStart = useCallback((id: string) => {
-    setDraggingSheetId(id);
-    setDropTarget(null);
-  }, []);
-
-  const handleDragOver = useCallback(
-    (id: string, e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      if (!draggingSheetId || draggingSheetId === id) return;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      const position = e.clientX < rect.left + rect.width / 2 ? "before" : "after";
-      setDropTarget({ id, position });
-    },
-    [draggingSheetId],
-  );
-
   const clearDragState = useCallback(() => {
     setDraggingSheetId(null);
     setDropTarget(null);
   }, []);
 
-  const handleDrop = useCallback(
-    (targetId: string) => {
-      if (!draggingSheetId || draggingSheetId === targetId || !dropTarget) {
-        clearDragState();
-        return;
+  const handleTabPointerDown = useCallback(
+    (e: React.PointerEvent, sheetId: string) => {
+      if (editingId) return;
+      e.preventDefault();
+      dragState.current.draggingId = sheetId;
+      setDraggingSheetId(sheetId);
+      setDropTarget(null);
+      const el = scrollContainerRef.current;
+      if (el) {
+        el.setPointerCapture(e.pointerId);
       }
-      reorderSheets(draggingSheetId, targetId, dropTarget.position);
+    },
+    [editingId],
+  );
+
+  const handleContainerPointerMove = useCallback(
+    (_e: React.PointerEvent) => {
+      const { draggingId } = dragState.current;
+      if (!draggingId || !scrollContainerRef.current) return;
+
+      const tabs = scrollContainerRef.current.querySelectorAll<HTMLElement>(
+        "[data-sheet-id]",
+      );
+      let best: { id: string; position: "before" | "after" } | null = null;
+      let bestDist = Infinity;
+
+      tabs.forEach((tab) => {
+        const id = tab.getAttribute("data-sheet-id");
+        if (!id || id === draggingId) return;
+        const rect = tab.getBoundingClientRect();
+        if (_e.clientX >= rect.left - 4 && _e.clientX <= rect.right + 4) {
+          const mid = rect.left + rect.width / 2;
+          const dist = Math.abs(_e.clientX - mid);
+          if (dist < bestDist) {
+            bestDist = dist;
+            best = {
+              id,
+              position: _e.clientX < mid ? "before" : "after",
+            };
+          }
+        }
+      });
+
+      dragState.current.dropTarget = best;
+      setDropTarget(best);
+    },
+    [],
+  );
+
+  const handleContainerPointerUp = useCallback(
+    (_e: React.PointerEvent) => {
+      const { draggingId, dropTarget: dt } = dragState.current;
+      dragState.current.draggingId = null;
+      dragState.current.dropTarget = null;
+
+      if (draggingId && dt && dt.id !== draggingId) {
+        reorderSheets(draggingId, dt.id, dt.position);
+      }
       clearDragState();
     },
-    [draggingSheetId, dropTarget, reorderSheets, clearDragState],
+    [reorderSheets, clearDragState],
   );
 
   return (
@@ -446,6 +472,9 @@ export const SheetSidebar = memo(function SheetSidebar() {
         ref={scrollContainerRef}
         className="flex-1 flex items-center overflow-x-auto scrollbar-none"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        onPointerMove={handleContainerPointerMove}
+        onPointerUp={handleContainerPointerUp}
+        onPointerCancel={handleContainerPointerUp}
       >
         {sheets.map((sheet) => {
           const isActive = sheet.id === currentSheetId;
@@ -464,10 +493,7 @@ export const SheetSidebar = memo(function SheetSidebar() {
               onStartRename={handleStartRename}
               onDuplicate={handleDuplicate}
               onDelete={handleDelete}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDragEnd={clearDragState}
-              onDrop={handleDrop}
+              onPointerDown={handleTabPointerDown}
               inputRef={inputRef}
               editValue={editValue}
               onEditValueChange={setEditValue}

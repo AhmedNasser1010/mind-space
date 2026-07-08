@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ToastProvider } from "@/components/ui/toast"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
+import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
 const geistSans = Geist({
@@ -37,6 +38,7 @@ export default function RootLayout({
             <ToastProvider>{children}</ToastProvider>
           </ConfirmProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   )

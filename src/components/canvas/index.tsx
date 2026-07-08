@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { useStore } from "@/store"
 import type { WidgetType } from "@/types"
 import { BaseWidget } from "@/components/widgets/base-widget"
@@ -14,6 +14,9 @@ export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
   const isPanning = useRef(false)
   const lastPointer = useRef({ x: 0, y: 0 })
+  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const isPinching = useRef(false)
+  const initialPinchDist = useRef(0)
 
   const currentSheetId = useStore((s) => s.currentSheetId)
   const sheets = useStore((s) => s.sheets)
@@ -42,7 +45,25 @@ export function Canvas() {
   const deselectAll = useStore((s) => s.deselectAll)
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest("[data-widget]")) return
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+    if (activePointers.current.size === 2) {
+      const pointers = Array.from(activePointers.current.values())
+      isPinching.current = true
+      isPanning.current = false
+      initialPinchDist.current = Math.hypot(
+        pointers[0].x - pointers[1].x,
+        pointers[0].y - pointers[1].y,
+      )
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+      return
+    }
+
+    if ((e.target as HTMLElement).closest("[data-widget]")) {
+      activePointers.current.delete(e.pointerId)
+      return
+    }
     deselectAll()
     isPanning.current = true
     lastPointer.current = { x: e.clientX, y: e.clientY }
@@ -53,6 +74,33 @@ export function Canvas() {
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (isPinching.current && activePointers.current.size === 2) {
+        const pointers = Array.from(activePointers.current.values())
+        const dist = Math.hypot(
+          pointers[0].x - pointers[1].x,
+          pointers[0].y - pointers[1].y,
+        )
+        const state = canvasStateRef.current
+        const newScale = Math.min(
+          Math.max(
+            state.scale * (dist / initialPinchDist.current),
+            0.1,
+          ),
+          5,
+        )
+        const scaleChange = newScale / state.scale
+        const midX = (pointers[0].x + pointers[1].x) / 2
+        const midY = (pointers[0].y + pointers[1].y) / 2
+        setCanvasState({
+          scale: newScale,
+          offsetX: midX - (midX - state.offsetX) * scaleChange,
+          offsetY: midY - (midY - state.offsetY) * scaleChange,
+        })
+        return
+      }
+
       if (!isPanning.current) return
       const state = canvasStateRef.current
       const dx = (e.clientX - lastPointer.current.x) / state.scale
@@ -66,10 +114,50 @@ export function Canvas() {
     [setCanvasState]
   )
 
-  const handlePointerUp = useCallback(() => {
-    isPanning.current = false
-    document.body.style.cursor = ""
-    document.body.style.userSelect = ""
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    activePointers.current.delete(e.pointerId)
+    if (activePointers.current.size < 2) {
+      isPinching.current = false
+    }
+    if (activePointers.current.size === 0) {
+      isPanning.current = false
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const onPointerDown = (e: PointerEvent) => {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      if (activePointers.current.size === 2) {
+        const pointers = Array.from(activePointers.current.values())
+        isPinching.current = true
+        isPanning.current = false
+        initialPinchDist.current = Math.hypot(
+          pointers[0].x - pointers[1].x,
+          pointers[0].y - pointers[1].y,
+        )
+      }
+    }
+
+    const onPointerUp = (e: PointerEvent) => {
+      activePointers.current.delete(e.pointerId)
+      if (activePointers.current.size < 2) {
+        isPinching.current = false
+      }
+    }
+
+    container.addEventListener("pointerdown", onPointerDown, true)
+    container.addEventListener("pointerup", onPointerUp, true)
+    container.addEventListener("pointercancel", onPointerUp, true)
+    return () => {
+      container.removeEventListener("pointerdown", onPointerDown, true)
+      container.removeEventListener("pointerup", onPointerUp, true)
+      container.removeEventListener("pointercancel", onPointerUp, true)
+    }
   }, [])
 
   const spacing = canvasState.gridSize * canvasState.scale

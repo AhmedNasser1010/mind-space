@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import type { Sheet, Widget, CanvasState, ThemeSettings } from "@/types"
+import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings } from "@/types"
 
 interface ClipboardData {
   widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
@@ -80,6 +80,73 @@ const defaultThemeSettings: ThemeSettings = {
   mode: "system",
   accentColor: "zinc",
   fontSize: 16,
+}
+
+function initializeDefaultState() {
+  const now = Date.now()
+  const sheetId = crypto.randomUUID()
+  const noteId = crypto.randomUUID()
+  const todoId = crypto.randomUUID()
+  const quickLinkId = crypto.randomUUID()
+
+  useStore.setState({
+    sheets: [
+      {
+        id: sheetId,
+        title: "Sheet 1",
+        widgetOrder: [noteId, todoId, quickLinkId],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
+    currentSheetId: sheetId,
+    widgets: {
+      [noteId]: {
+        id: noteId,
+        type: WidgetType.Note,
+        title: "Welcome!",
+        x: 150,
+        y: 150,
+        width: 320,
+        height: 280,
+        zIndex: 1,
+        collapsed: false,
+        data: {
+          content: "Welcome to Mind Space!\n\nThis is your personal canvas for organizing thoughts, tasks, and ideas.\n\nStart by editing this note, checking off the todo items, or adding more widgets with the + button.",
+        },
+      },
+      [todoId]: {
+        id: todoId,
+        type: WidgetType.Todo,
+        title: "Getting Started",
+        x: 530,
+        y: 150,
+        width: 300,
+        height: 280,
+        zIndex: 2,
+        collapsed: false,
+        data: {
+          items: [
+            { id: crypto.randomUUID(), text: "Pan the canvas (hold Space + drag)", status: "todo" as const, done: false },
+            { id: crypto.randomUUID(), text: "Add widgets from the + button", status: "todo" as const, done: false },
+            { id: crypto.randomUUID(), text: "Create new sheets in the sidebar", status: "todo" as const, done: false },
+          ],
+        },
+      },
+      [quickLinkId]: {
+        id: quickLinkId,
+        type: WidgetType.QuickLink,
+        title: "Quick Links",
+        x: 150,
+        y: 490,
+        width: 280,
+        height: 180,
+        zIndex: 3,
+        collapsed: false,
+        data: {},
+      },
+    },
+  })
 }
 
 const debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}
@@ -668,6 +735,14 @@ export const useStore = create<StoreState>()(
         redoStack: state.redoStack,
         clipboard: state.clipboard,
       }),
+      onRehydrateStorage: () => {
+        return (state, error) => {
+          if (error) return
+          if (state && state.sheets.length === 0) {
+            setTimeout(initializeDefaultState, 0)
+          }
+        }
+      },
     }
   )
 )

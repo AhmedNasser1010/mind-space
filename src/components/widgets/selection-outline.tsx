@@ -33,9 +33,11 @@ const ResizeHandle = memo(function ResizeHandle({
   return (
     <div
       {...handlers}
-      className={`absolute z-10 h-3 w-3 rounded-full border-2 border-primary bg-background shadow-sm ${className}`}
-      style={{ touchAction: "none" }}
-    />
+      className={`absolute z-10 flex items-center justify-center ${className}`}
+      style={{ touchAction: "none", width: 28, height: 28, margin: -14 }}
+    >
+      <div className="h-3 w-3 rounded-full border-2 border-primary bg-background shadow-sm pointer-events-none" />
+    </div>
   )
 })
 
