@@ -1,36 +1,69 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Mind Space
+
+A personal mind organizer — a freestyle canvas dashboard for notes, todos, timers, habits, and more.
+
+Arrange widgets freely on an infinite, zoomable canvas. Organize your thoughts across multiple sheets. Everything is local — no accounts, no servers, no cloud.
+
+## Features
+
+- **Infinite Canvas** — pan, zoom, snap-to-grid. Navigate with drag, scroll wheel, or Space+drag.
+- **Sheets** — multiple named canvases organized in a tab bar. Add, rename, duplicate, reorder, delete.
+- **Widgets** — add and arrange any mix of:
+  - Note (rich text)
+  - Label (editable text)
+  - Todo List (todo / in-progress / done)
+  - Counter (configurable step)
+  - Timer (countdown)
+  - Stopwatch (with lap recording)
+  - Calendar (monthly with per-day notes)
+  - Habit Tracker (emoji-labeled, monthly grid, streak tracking)
+  - Quick Link (bookmark with favicon)
+- **Drag, Resize, Collapse** — every widget is freely positioned and resizable via 8 handles.
+- **Multi-Select** — Shift+click to batch operations.
+- **Color Themes** — 12 accent colors per widget.
+- **Undo / Redo** — history stack (up to 50 steps).
+- **Copy / Paste** — across sheets and canvases.
+- **Light / Dark / System** theme toggle.
+- **Persistent** — all data saved to localStorage. Debounced writes, flushes on tab close.
+
+## Tech Stack
+
+[Next.js](https://nextjs.org/) (App Router) · [React](https://react.dev/) · [TypeScript](https://www.typescriptlang.org/) · [Tailwind CSS](https://tailwindcss.com/) v4 · [Zustand](https://github.com/pmndrs/zustand) (state + persist) · [Radix UI](https://www.radix-ui.com/) · [Lucide](https://lucide.dev/) icons · [Frimousse](https://github.com/penx/frimousse) (emoji picker)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Production build |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+Mind Space is a fully client-side single-page application. There is no backend, no database, and no API routes. All state is managed by a Zustand store persisted to localStorage.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+page.tsx
+├── SheetSidebar (tab bar for sheet management)
+└── Canvas (infinite pan/zoom canvas)
+    ├── ZoomControls (zoom, theme, add widget)
+    └── Widgets (for active sheet)
+        └── BaseWidget (drag, resize, select, context menu, color)
+            ├── SelectionOutline (resize handles)
+            ├── WidgetToolbar (title, collapse, menu)
+            └── WidgetComponent (NoteWidget | TodoWidget | ...)
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT

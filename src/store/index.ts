@@ -1,0 +1,673 @@
+import { create } from "zustand"
+import { persist, createJSONStorage } from "zustand/middleware"
+import type { Sheet, Widget, CanvasState, ThemeSettings } from "@/types"
+
+interface ClipboardData {
+  widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
+  minX: number
+  minY: number
+}
+
+interface Snapshot {
+  sheets: Sheet[]
+  widgets: Record<string, Widget>
+  currentSheetId: string | null
+}
+
+interface StoreState {
+  sheets: Sheet[]
+  currentSheetId: string | null
+  widgets: Record<string, Widget>
+  selectedWidgetIds: string[]
+  canvasState: CanvasState
+  themeSettings: ThemeSettings
+  undoStack: string[]
+  redoStack: string[]
+  clipboard: ClipboardData | null
+
+  addSheet: (title: string, description?: string) => void
+  deleteSheet: (id: string) => void
+  setCurrentSheet: (id: string) => void
+  updateSheet: (id: string, updates: Partial<Sheet>) => void
+  duplicateSheet: (id: string) => void
+  reorderSheets: (activeSheetId: string, targetSheetId: string, position: "before" | "after") => void
+  reorderSheetWidgets: (sheetId: string, widgetOrder: string[]) => void
+
+  addWidget: (sheetId: string, widget: Widget) => void
+  updateWidget: (id: string, updates: Partial<Widget>) => void
+  deleteWidget: (sheetId: string, widgetId: string) => void
+  deleteWidgets: (sheetId: string, widgetIds: string[]) => void
+  moveWidget: (id: string, x: number, y: number) => void
+  resizeWidget: (id: string, width: number, height: number) => void
+  duplicateWidget: (sheetId: string, widgetId: string) => void
+  duplicateWidgets: (sheetId: string, widgetIds: string[]) => void
+  toggleCollapse: (id: string) => void
+  renameWidget: (id: string, title: string) => void
+
+  selectWidget: (id: string) => void
+  addToSelection: (id: string) => void
+  removeFromSelection: (id: string) => void
+  deselectAll: () => void
+
+  setCanvasState: (state: Partial<CanvasState>) => void
+  resetCanvasView: () => void
+
+  setThemeSettings: (settings: Partial<ThemeSettings>) => void
+
+  copyWidgets: (sheetId: string, widgetIds: string[]) => void
+  pasteWidgets: (sheetId: string) => void
+
+  undo: () => void
+  redo: () => void
+}
+
+const MAX_HISTORY = 50
+
+function takeSnapshot(sheets: Sheet[], widgets: Record<string, Widget>, currentSheetId: string | null): string {
+  return JSON.stringify({ sheets, widgets, currentSheetId })
+}
+
+const defaultCanvasState: CanvasState = {
+  offsetX: 0,
+  offsetY: 0,
+  scale: 1,
+  gridEnabled: true,
+  snapToGrid: true,
+  gridSize: 20,
+}
+
+const defaultThemeSettings: ThemeSettings = {
+  mode: "system",
+  accentColor: "zinc",
+  fontSize: 16,
+}
+
+const debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const pendingWrites = new Map<string, string>()
+
+export function flushPendingWrites() {
+  for (const [name, value] of pendingWrites) {
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      /* storage full or unavailable */
+    }
+  }
+  pendingWrites.clear()
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", flushPendingWrites)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushPendingWrites()
+    }
+  })
+}
+
+const debouncedStorage = {
+  getItem: (name: string) => {
+    try {
+      return localStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  setItem: (name: string, value: string) => {
+    pendingWrites.set(name, value)
+    clearTimeout(debounceTimers[name])
+    debounceTimers[name] = setTimeout(() => {
+      pendingWrites.delete(name)
+      try {
+        localStorage.setItem(name, value)
+      } catch {
+        /* storage full or unavailable */
+      }
+    }, 300)
+  },
+  removeItem: (name: string) => {
+    pendingWrites.delete(name)
+    clearTimeout(debounceTimers[name])
+    localStorage.removeItem(name)
+  },
+}
+
+export const useStore = create<StoreState>()(
+  persist(
+    (set, get) => ({
+      sheets: [],
+      currentSheetId: null,
+      widgets: {},
+      selectedWidgetIds: [],
+      canvasState: defaultCanvasState,
+      themeSettings: defaultThemeSettings,
+      undoStack: [],
+      redoStack: [],
+      clipboard: null,
+
+      addSheet: (title, description) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const now = Date.now()
+          const sheet: Sheet = {
+            id: crypto.randomUUID(),
+            title,
+            description,
+            widgetOrder: [],
+            createdAt: now,
+            updatedAt: now,
+          }
+          return {
+            sheets: [...state.sheets, sheet],
+            currentSheetId: state.currentSheetId ?? sheet.id,
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      deleteSheet: (id) => {
+        set((state) => {
+          const sheet = state.sheets.find((s) => s.id === id)
+          if (!sheet) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const remainingWidgets = { ...state.widgets }
+          for (const widgetId of sheet.widgetOrder) {
+            delete remainingWidgets[widgetId]
+          }
+          const updatedSheets = state.sheets.filter((s) => s.id !== id)
+          return {
+            sheets: updatedSheets,
+            widgets: remainingWidgets,
+            currentSheetId:
+              state.currentSheetId === id
+                ? updatedSheets[0]?.id ?? null
+                : state.currentSheetId,
+            selectedWidgetIds:
+              state.currentSheetId === id ? [] : state.selectedWidgetIds,
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      setCurrentSheet: (id) => {
+        set({ currentSheetId: id, selectedWidgetIds: [] })
+      },
+
+      updateSheet: (id, updates) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            sheets: state.sheets.map((s) =>
+              s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      duplicateSheet: (id) => {
+        set((state) => {
+          const original = state.sheets.find((s) => s.id === id)
+          if (!original) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const now = Date.now()
+          const newId = crypto.randomUUID()
+          const widgetIdMap = new Map<string, string>()
+          const newWidgets: Record<string, Widget> = {}
+          for (const wid of original.widgetOrder) {
+            const w = state.widgets[wid]
+            if (!w) continue
+            const newWid = crypto.randomUUID()
+            widgetIdMap.set(wid, newWid)
+            newWidgets[newWid] = {
+              ...w,
+              id: newWid,
+              x: w.x + 24,
+              y: w.y + 24,
+              title: `${w.title} (copy)`,
+            }
+          }
+          const newSheet: Sheet = {
+            ...original,
+            id: newId,
+            title: `${original.title} (copy)`,
+            widgetOrder: original.widgetOrder
+              .map((wid) => widgetIdMap.get(wid))
+              .filter(Boolean) as string[],
+            createdAt: now,
+            updatedAt: now,
+          }
+          return {
+            sheets: [...state.sheets, newSheet],
+            widgets: { ...state.widgets, ...newWidgets },
+            currentSheetId: newId,
+            selectedWidgetIds: [],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      reorderSheets: (activeSheetId, targetSheetId, position) => {
+        set((state) => {
+          if (activeSheetId === targetSheetId) return state
+
+          const fromIndex = state.sheets.findIndex((s) => s.id === activeSheetId)
+          const targetIndex = state.sheets.findIndex((s) => s.id === targetSheetId)
+          if (fromIndex < 0 || targetIndex < 0) return state
+
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const nextSheets = [...state.sheets]
+          const [moved] = nextSheets.splice(fromIndex, 1)
+          const adjustedTargetIndex =
+            position === "after"
+              ? targetIndex > fromIndex
+                ? targetIndex
+                : targetIndex + 1
+              : targetIndex > fromIndex
+                ? targetIndex - 1
+                : targetIndex
+
+          nextSheets.splice(adjustedTargetIndex, 0, {
+            ...moved,
+            updatedAt: Date.now(),
+          })
+
+          return {
+            sheets: nextSheets,
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      reorderSheetWidgets: (sheetId, widgetOrder) => {
+        set((state) => ({
+          sheets: state.sheets.map((s) =>
+            s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
+          ),
+        }))
+      },
+
+      addWidget: (sheetId, widget) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            widgets: { ...state.widgets, [widget.id]: widget },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, widget.id],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      updateWidget: (id, updates) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            widgets: {
+              ...state.widgets,
+              [id]: { ...widget, ...updates },
+            },
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      deleteWidgets: (sheetId, widgetIds) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const remainingWidgets = { ...state.widgets }
+          for (const id of widgetIds) {
+            delete remainingWidgets[id]
+          }
+          return {
+            widgets: remainingWidgets,
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: s.widgetOrder.filter(
+                      (id) => !widgetIds.includes(id)
+                    ),
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            selectedWidgetIds: state.selectedWidgetIds.filter(
+              (id) => !widgetIds.includes(id)
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      deleteWidget: (sheetId, widgetId) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const remainingWidgets = { ...state.widgets }
+          delete remainingWidgets[widgetId]
+          return {
+            widgets: remainingWidgets,
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: s.widgetOrder.filter((id) => id !== widgetId),
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            selectedWidgetIds: state.selectedWidgetIds.filter(
+              (id) => id !== widgetId
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      moveWidget: (id, x, y) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          return {
+            widgets: {
+              ...state.widgets,
+              [id]: { ...widget, x, y },
+            },
+          }
+        })
+      },
+
+      resizeWidget: (id, width, height) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          return {
+            widgets: {
+              ...state.widgets,
+              [id]: { ...widget, width, height },
+            },
+          }
+        })
+      },
+
+      duplicateWidgets: (sheetId, widgetIds) => {
+        set((state) => {
+          const sheet = state.sheets.find((s) => s.id === sheetId)
+          if (!sheet) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const maxZ = Math.max(
+            ...Object.values(state.widgets).map((w) => w.zIndex),
+            0
+          )
+          const newWidgets: Record<string, Widget> = {}
+          const newIds: string[] = []
+          widgetIds.forEach((id, index) => {
+            const original = state.widgets[id]
+            if (!original) return
+            const duplicate: Widget = {
+              ...original,
+              id: crypto.randomUUID(),
+              x: original.x + 24 + index * 8,
+              y: original.y + 24 + index * 8,
+              zIndex: maxZ + 1 + index,
+              title: `${original.title} (copy)`,
+            }
+            newWidgets[duplicate.id] = duplicate
+            newIds.push(duplicate.id)
+          })
+          return {
+            widgets: { ...state.widgets, ...newWidgets },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, ...newIds],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      duplicateWidget: (sheetId, widgetId) => {
+        set((state) => {
+          const original = state.widgets[widgetId]
+          if (!original) return state
+          const sheet = state.sheets.find((s) => s.id === sheetId)
+          if (!sheet) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const maxZ = Math.max(
+            ...Object.values(state.widgets).map((w) => w.zIndex),
+            0
+          )
+          const duplicate: Widget = {
+            ...original,
+            id: crypto.randomUUID(),
+            x: original.x + 24,
+            y: original.y + 24,
+            zIndex: maxZ + 1,
+            title: `${original.title} (copy)`,
+          }
+          return {
+            widgets: { ...state.widgets, [duplicate.id]: duplicate },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, duplicate.id],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      toggleCollapse: (id) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            widgets: {
+              ...state.widgets,
+              [id]: { ...widget, collapsed: !widget.collapsed },
+            },
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      renameWidget: (id, title) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            widgets: {
+              ...state.widgets,
+              [id]: { ...widget, title },
+            },
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      selectWidget: (id) => {
+        set({ selectedWidgetIds: [id] })
+      },
+
+      addToSelection: (id) => {
+        set((state) => ({
+          selectedWidgetIds: state.selectedWidgetIds.includes(id)
+            ? state.selectedWidgetIds
+            : [...state.selectedWidgetIds, id],
+        }))
+      },
+
+      removeFromSelection: (id) => {
+        set((state) => ({
+          selectedWidgetIds: state.selectedWidgetIds.filter(
+            (wid) => wid !== id
+          ),
+        }))
+      },
+
+      deselectAll: () => {
+        set({ selectedWidgetIds: [] })
+      },
+
+      setCanvasState: (newState) => {
+        set((prev) => ({
+          canvasState: { ...prev.canvasState, ...newState },
+        }))
+      },
+
+      resetCanvasView: () => {
+        set({ canvasState: defaultCanvasState })
+      },
+
+      setThemeSettings: (settings) => {
+        set((prev) => ({
+          themeSettings: { ...prev.themeSettings, ...settings },
+        }))
+      },
+
+      copyWidgets: (sheetId, widgetIds) => {
+        const state = get()
+        const sheet = state.sheets.find((s) => s.id === sheetId)
+        if (!sheet || widgetIds.length === 0) return
+        const widgets = widgetIds.map((id) => state.widgets[id]).filter(Boolean)
+        if (widgets.length === 0) return
+        const minX = Math.min(...widgets.map((w) => w.x))
+        const minY = Math.min(...widgets.map((w) => w.y))
+        const clipboard: ClipboardData = {
+          widgets: widgets.map((w) => ({
+            type: w.type,
+            title: w.title,
+            width: w.width,
+            height: w.height,
+            data: w.data,
+            collapsed: w.collapsed,
+            x: w.x,
+            y: w.y,
+          })),
+          minX,
+          minY,
+        }
+        set({ clipboard })
+      },
+
+      pasteWidgets: (sheetId) => {
+        set((state) => {
+          const sheet = state.sheets.find((s) => s.id === sheetId)
+          if (!sheet || !state.clipboard) return state
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const maxZ = Math.max(
+            ...Object.values(state.widgets).map((w) => w.zIndex),
+            0
+          )
+          const offset = 24
+          const newWidgets: Record<string, Widget> = {}
+          const newIds: string[] = []
+          state.clipboard.widgets.forEach((data, index) => {
+            const id = crypto.randomUUID()
+            newWidgets[id] = {
+              id,
+              type: data.type,
+              title: data.title,
+              x: data.x - state.clipboard!.minX + offset + index * 4,
+              y: data.y - state.clipboard!.minY + offset + index * 4,
+              width: data.width,
+              height: data.height,
+              zIndex: maxZ + 1 + index,
+              collapsed: data.collapsed,
+              data: { ...data.data },
+            }
+            newIds.push(id)
+          })
+          return {
+            widgets: { ...state.widgets, ...newWidgets },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, ...newIds],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            selectedWidgetIds: newIds,
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      undo: () => {
+        const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
+        if (undoStack.length === 0) return
+        const previous: Snapshot = JSON.parse(undoStack[undoStack.length - 1])
+        const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
+        set({
+          ...previous,
+          undoStack: undoStack.slice(0, -1),
+          redoStack: [...redoStack, currentSnapshot].slice(-MAX_HISTORY),
+          selectedWidgetIds: [],
+        })
+      },
+
+      redo: () => {
+        const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
+        if (redoStack.length === 0) return
+        const next: Snapshot = JSON.parse(redoStack[redoStack.length - 1])
+        const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
+        set({
+          ...next,
+          undoStack: [...undoStack, currentSnapshot].slice(-MAX_HISTORY),
+          redoStack: redoStack.slice(0, -1),
+          selectedWidgetIds: [],
+        })
+      },
+    }),
+    {
+      name: "mind-space-store",
+      storage: createJSONStorage(() => debouncedStorage),
+      partialize: (state) => ({
+        sheets: state.sheets,
+        currentSheetId: state.currentSheetId,
+        widgets: state.widgets,
+        canvasState: state.canvasState,
+        themeSettings: state.themeSettings,
+        undoStack: state.undoStack,
+        redoStack: state.redoStack,
+        clipboard: state.clipboard,
+      }),
+    }
+  )
+)
