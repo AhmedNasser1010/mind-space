@@ -45,6 +45,7 @@ interface StoreState {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   deselectAll: () => void
+  setSelection: (ids: string[]) => void
 
   setCanvasState: (state: Partial<CanvasState>) => void
   resetCanvasView: () => void
@@ -687,6 +688,10 @@ export const useStore = create<StoreState>()(
 
       deselectAll: () => {
         set({ selectedWidgetIds: [] })
+      },
+
+      setSelection: (ids) => {
+        set({ selectedWidgetIds: ids })
       },
 
       setCanvasState: (newState) => {
