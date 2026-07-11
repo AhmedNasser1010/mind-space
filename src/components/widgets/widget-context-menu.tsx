@@ -24,19 +24,19 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
   onStartRename,
   children,
 }: WidgetContextMenuProps) {
-  const selectedWidgetIds = useStore((s) => s.selectedWidgetIds)
+  const isMulti = useStore(
+    (s) => s.selectedWidgetIds.includes(widgetId) && s.selectedWidgetIds.length > 1
+  )
+  const count = useStore((s) => s.selectedWidgetIds.length)
   const widget = useStore((s) => s.widgets[widgetId])
 
   if (!widget) return children
-
-  const isMulti = selectedWidgetIds.includes(widgetId) && selectedWidgetIds.length > 1
-  const count = selectedWidgetIds.length
 
   function applyColor(id: string) {
     const s = useStore.getState()
     const colorTheme = id === "default" ? undefined : id
     if (isMulti) {
-      s.updateWidgets(selectedWidgetIds, { colorTheme })
+      s.updateWidgets(s.selectedWidgetIds, { colorTheme })
     } else {
       s.updateWidget(widgetId, { colorTheme })
     }
@@ -46,7 +46,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
     const s = useStore.getState()
     if (!s.currentSheetId) return
     if (isMulti) {
-      s.duplicateWidgets(s.currentSheetId, selectedWidgetIds)
+      s.duplicateWidgets(s.currentSheetId, s.selectedWidgetIds)
     } else {
       s.duplicateWidget(s.currentSheetId, widgetId)
     }
@@ -56,7 +56,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
     const s = useStore.getState()
     if (!s.currentSheetId) return
     if (isMulti) {
-      s.deleteWidgets(s.currentSheetId, selectedWidgetIds)
+      s.deleteWidgets(s.currentSheetId, s.selectedWidgetIds)
     } else {
       s.deleteWidget(s.currentSheetId, widgetId)
     }
