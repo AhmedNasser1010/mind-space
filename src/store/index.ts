@@ -35,6 +35,8 @@ interface StoreState {
 
   addWidget: (sheetId: string, widget: Widget) => void
   updateWidget: (id: string, updates: Partial<Widget>) => void
+  updateWidgetSilent: (id: string, updates: Partial<Widget>) => void
+  recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
@@ -403,6 +405,21 @@ export const useStore = create<StoreState>()(
             redoStack: [],
           }
         })
+      },
+
+      updateWidgetSilent: (id, updates) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          return { widgets: { ...state.widgets, [id]: { ...widget, ...updates } } }
+        })
+      },
+
+      recordSnapshot: () => {
+        set((state) => ({
+          undoStack: [...state.undoStack, takeSnapshot(state.sheets, state.widgets, state.currentSheetId)].slice(-MAX_HISTORY),
+          redoStack: [],
+        }))
       },
 
       deleteWidgets: (sheetId, widgetIds) => {
