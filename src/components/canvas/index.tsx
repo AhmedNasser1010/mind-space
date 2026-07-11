@@ -10,6 +10,7 @@ import { ZoomControls } from "./zoom-controls"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
 import { MarqueeOverlay } from "./marquee-overlay"
+import { SnapGuides } from "./snap-guides"
 import { LayoutTemplate } from "lucide-react"
 
 const CanvasWidget = memo(function CanvasWidget({ widgetId }: { widgetId: string }) {
@@ -95,6 +96,7 @@ export function Canvas() {
           <CanvasWidget key={id} widgetId={id} />
         ))}
         <MarqueeOverlay />
+        <SnapGuides />
       </div>
 
       {widgetOrder?.length === 0 && currentSheetId && (
