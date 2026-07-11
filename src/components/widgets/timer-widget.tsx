@@ -51,7 +51,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
       const newRemaining = computeRemaining(d)
       if (newRemaining <= 0) {
         updateWidget(widgetId, {
-          data: { ...d, endsAt: null, pausedRemaining: null },
+          data: { ...d, endsAt: null, pausedRemaining: 0 },
         })
         clearInterval(interval)
       } else {
@@ -131,7 +131,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
             "text-4xl font-mono font-bold tabular-nums tracking-tight cursor-pointer",
             isComplete && "text-destructive animate-pulse"
           )}
-          onClick={!running && !paused ? handleStartEdit : undefined}
+          onClick={(!running && !paused) || isComplete ? handleStartEdit : undefined}
           title="Click to set duration"
         >
           {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
@@ -154,7 +154,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
             <Pause className="h-4 w-4 fill-current" />
           </RoundButton>
         )}
-        {!running && paused && (
+        {!running && paused && remaining > 0 && (
           <RoundButton label="Resume" variant="primary" onClick={handleResume}>
             <Play className="h-4 w-4 fill-current" />
           </RoundButton>
