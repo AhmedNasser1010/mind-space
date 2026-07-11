@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useRef } from "react"
 import { useStore } from "@/store"
+import { useInteractionStore } from "@/store/interaction"
+import { rectsIntersect } from "@/lib/geometry"
+import type { SelectionBox } from "@/types"
 
 export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement | null>) {
   const spaceHeld = useRef(false)
@@ -11,43 +14,51 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
   const isPinching = useRef(false)
   const initialPinchDist = useRef(0)
 
+  const isMarqueeing = useRef(false)
+  const marqueeStartWorld = useRef({ x: 0, y: 0 })
+  const marqueeStartClient = useRef({ x: 0, y: 0 })
+  const initialSelection = useRef<string[]>([])
+  const marqueeAdditive = useRef(false)
+
   const canvasState = useStore((s) => s.canvasState)
   const canvasStateRef = useRef(canvasState)
   canvasStateRef.current = canvasState // eslint-disable-line react-hooks/refs
 
   const setCanvasState = useStore((s) => s.setCanvasState)
   const deselectAll = useStore((s) => s.deselectAll)
+  const setSelection = useStore((s) => s.setSelection)
+  const setMarquee = useInteractionStore((s) => s.setMarquee)
 
   const startPinch = useCallback(() => {
     const pointers = Array.from(activePointers.current.values())
     isPinching.current = true
     isPanning.current = false
+    if (isMarqueeing.current) {
+      isMarqueeing.current = false
+      setMarquee(null)
+    }
     initialPinchDist.current = Math.hypot(
       pointers[0].x - pointers[1].x,
       pointers[0].y - pointers[1].y,
     )
-  }, [])
+  }, [setMarquee])
 
-  const onPointerDown = useCallback(
+  const worldPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const state = canvasStateRef.current
+      const rect = containerRef.current?.getBoundingClientRect()
+      const left = rect?.left ?? 0
+      const top = rect?.top ?? 0
+      return {
+        x: (clientX - left - state.offsetX) / state.scale,
+        y: (clientY - top - state.offsetY) / state.scale,
+      }
+    },
+    [containerRef]
+  )
+
+  const startPan = useCallback(
     (e: React.PointerEvent) => {
-      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-
-      if (activePointers.current.size === 2) {
-        startPinch()
-        document.body.style.cursor = ""
-        document.body.style.userSelect = ""
-        return
-      }
-
-      const onWidget = (e.target as HTMLElement).closest("[data-widget]")
-      if (onWidget && !spaceHeld.current) {
-        activePointers.current.delete(e.pointerId)
-        return
-      }
-
-      if (!onWidget) {
-        deselectAll()
-      }
       isPanning.current = true
       lastPointer.current = { x: e.clientX, y: e.clientY }
       e.currentTarget.setPointerCapture(e.pointerId)
@@ -64,7 +75,53 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
         container.style.userSelect = "none"
       }
     },
-    [containerRef, deselectAll, startPinch]
+    [containerRef]
+  )
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+
+      if (activePointers.current.size === 2) {
+        startPinch()
+        document.body.style.cursor = ""
+        document.body.style.userSelect = ""
+        return
+      }
+
+      // Middle-button drag pans from anywhere, including over widgets.
+      if (e.button === 1) {
+        e.preventDefault()
+        startPan(e)
+        return
+      }
+
+      const onWidget = (e.target as HTMLElement).closest("[data-widget]")
+      if (onWidget && !spaceHeld.current) {
+        activePointers.current.delete(e.pointerId)
+        return
+      }
+
+      if (spaceHeld.current) {
+        startPan(e)
+        return
+      }
+
+      if (e.button !== 0) return
+
+      // Empty-canvas plain drag: marquee select instead of pan.
+      initialSelection.current = useStore.getState().selectedWidgetIds
+      marqueeAdditive.current = e.shiftKey || e.metaKey || e.ctrlKey
+      if (!marqueeAdditive.current) {
+        deselectAll()
+      }
+      const world = worldPoint(e.clientX, e.clientY)
+      marqueeStartWorld.current = world
+      marqueeStartClient.current = { x: e.clientX, y: e.clientY }
+      isMarqueeing.current = true
+      e.currentTarget.setPointerCapture(e.pointerId)
+    },
+    [deselectAll, startPan, startPinch, worldPoint]
   )
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
@@ -92,33 +149,81 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
       return
     }
 
+    if (isMarqueeing.current) {
+      const cur = worldPoint(e.clientX, e.clientY)
+      const start = marqueeStartWorld.current
+      const box: SelectionBox = {
+        x: Math.min(start.x, cur.x),
+        y: Math.min(start.y, cur.y),
+        width: Math.abs(cur.x - start.x),
+        height: Math.abs(cur.y - start.y),
+      }
+      setMarquee(box)
+
+      const storeState = useStore.getState()
+      const sheet = storeState.sheets.find((s) => s.id === storeState.currentSheetId)
+      const hits = (sheet?.widgetOrder ?? []).filter((id) => {
+        const w = storeState.widgets[id]
+        return w && rectsIntersect(box, { x: w.x, y: w.y, width: w.width, height: w.height })
+      })
+      const nextSelection = marqueeAdditive.current
+        ? Array.from(new Set([...initialSelection.current, ...hits]))
+        : hits
+
+      const current = storeState.selectedWidgetIds
+      const unchanged =
+        current.length === nextSelection.length &&
+        current.every((id) => nextSelection.includes(id))
+      if (!unchanged) {
+        setSelection(nextSelection)
+      }
+      return
+    }
+
     if (!isPanning.current) return
     const state = canvasStateRef.current
-    const dx = (e.clientX - lastPointer.current.x) / state.scale
-    const dy = (e.clientY - lastPointer.current.y) / state.scale
+    const dx = e.clientX - lastPointer.current.x
+    const dy = e.clientY - lastPointer.current.y
     lastPointer.current = { x: e.clientX, y: e.clientY }
     setCanvasState({
       offsetX: state.offsetX + dx,
       offsetY: state.offsetY + dy,
     })
-  }, [setCanvasState])
+  }, [setCanvasState, setMarquee, setSelection, worldPoint])
 
-  const onPointerUp = useCallback((e: React.PointerEvent) => {
-    activePointers.current.delete(e.pointerId)
-    if (activePointers.current.size < 2) {
-      isPinching.current = false
-    }
-    if (activePointers.current.size === 0) {
-      isPanning.current = false
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-      const container = containerRef.current
-      if (container) {
-        container.style.cursor = spaceHeld.current ? "grab" : ""
-        container.style.userSelect = ""
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent) => {
+      activePointers.current.delete(e.pointerId)
+      if (activePointers.current.size < 2) {
+        isPinching.current = false
       }
-    }
-  }, [containerRef])
+      if (activePointers.current.size === 0) {
+        isPanning.current = false
+        document.body.style.cursor = ""
+        document.body.style.userSelect = ""
+        const container = containerRef.current
+        if (container) {
+          container.style.cursor = spaceHeld.current ? "grab" : ""
+          container.style.userSelect = ""
+        }
+      }
+
+      if (isMarqueeing.current) {
+        isMarqueeing.current = false
+        setMarquee(null)
+        const travel = Math.hypot(
+          e.clientX - marqueeStartClient.current.x,
+          e.clientY - marqueeStartClient.current.y,
+        )
+        if (travel < 4) {
+          // Plain click, not a drag: undo any hit-test the tiny move wrote
+          // and fall back to whatever pointerdown already decided.
+          setSelection(marqueeAdditive.current ? initialSelection.current : [])
+        }
+      }
+    },
+    [containerRef, setMarquee, setSelection]
+  )
 
   useEffect(() => {
     const container = containerRef.current
@@ -166,16 +271,27 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault()
       const state = canvasStateRef.current
-      const rect = container.getBoundingClientRect()
-      const mouseX = e.clientX - rect.left
-      const mouseY = e.clientY - rect.top
-      const zoomFactor = Math.exp(-e.deltaY * 0.001)
-      const newScale = Math.min(Math.max(state.scale * zoomFactor, 0.1), 5)
-      const scaleChange = newScale / state.scale
+
+      // Trackpad pinch delivers ctrlKey: true automatically; cmd/ctrl+wheel
+      // gives mouse users precision zoom. Bare wheel pans (Figma convention).
+      if (e.ctrlKey || e.metaKey) {
+        const rect = container.getBoundingClientRect()
+        const mouseX = e.clientX - rect.left
+        const mouseY = e.clientY - rect.top
+        const zoomFactor = Math.exp(-e.deltaY * 0.001)
+        const newScale = Math.min(Math.max(state.scale * zoomFactor, 0.1), 5)
+        const scaleChange = newScale / state.scale
+        setCanvasState({
+          scale: newScale,
+          offsetX: mouseX - (mouseX - state.offsetX) * scaleChange,
+          offsetY: mouseY - (mouseY - state.offsetY) * scaleChange,
+        })
+        return
+      }
+
       setCanvasState({
-        scale: newScale,
-        offsetX: mouseX - (mouseX - state.offsetX) * scaleChange,
-        offsetY: mouseY - (mouseY - state.offsetY) * scaleChange,
+        offsetX: state.offsetX - e.deltaX,
+        offsetY: state.offsetY - e.deltaY,
       })
     }
 
