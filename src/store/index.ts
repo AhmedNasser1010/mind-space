@@ -764,13 +764,38 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: 1,
+      version: 2,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
         if (version < 1) {
           // v0 blobs carried full undo/redo history; strip it.
           delete state.undoStack
           delete state.redoStack
+        }
+        if (version < 2) {
+          // v1 widgets stored timer/stopwatch progress as tick-decremented
+          // fields; convert to timestamp-based fields. Running timers/
+          // stopwatches become paused at their last known value.
+          const widgets = state.widgets as Record<string, Widget> | undefined
+          if (widgets) {
+            for (const widget of Object.values(widgets)) {
+              if (widget.type === WidgetType.Timer) {
+                const d = widget.data as { duration?: number; remaining?: number } | undefined
+                widget.data = {
+                  duration: d?.duration ?? 300,
+                  endsAt: null,
+                  pausedRemaining: d?.remaining ?? null,
+                }
+              } else if (widget.type === WidgetType.Stopwatch) {
+                const d = widget.data as { elapsed?: number; laps?: number[] } | undefined
+                widget.data = {
+                  startedAt: null,
+                  accumulated: d?.elapsed ?? 0,
+                  laps: d?.laps ?? [],
+                }
+              }
+            }
+          }
         }
         return state
       },
