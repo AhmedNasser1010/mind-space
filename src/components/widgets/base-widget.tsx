@@ -30,6 +30,7 @@ export const BaseWidget = memo(function BaseWidget({
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
 
   const widget = useStore((s) => s.widgets[widgetId])
   const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
@@ -56,6 +57,8 @@ export const BaseWidget = memo(function BaseWidget({
           } else {
             addToSelection(widgetId)
           }
+        } else if (isSelected) {
+          pendingCollapse.current = { x: e.clientX, y: e.clientY }
         } else {
           selectWidget(widgetId)
         }
@@ -66,6 +69,20 @@ export const BaseWidget = memo(function BaseWidget({
     },
     [selectWidget, addToSelection, removeFromSelection, widgetId, isSelected]
   )
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const pending = pendingCollapse.current
+    pendingCollapse.current = null
+    if (!pending) return
+    const dist = Math.hypot(e.clientX - pending.x, e.clientY - pending.y)
+    if (dist < 4) {
+      selectWidget(widgetId)
+    }
+  }, [selectWidget, widgetId])
+
+  const handlePointerCancel = useCallback(() => {
+    pendingCollapse.current = null
+  }, [])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -108,6 +125,8 @@ export const BaseWidget = memo(function BaseWidget({
           ...themeVars,
         } as React.CSSProperties}
         onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onContextMenu={handleContextMenu}
       >
         {isSelected && <SelectionOutline widgetId={widgetId} />}
