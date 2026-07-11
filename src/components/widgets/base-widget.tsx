@@ -31,6 +31,7 @@ export const BaseWidget = memo(function BaseWidget({
   const [renameValue, setRenameValue] = useState("")
   const renameInputRef = useRef<HTMLInputElement>(null)
   const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
+  const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
 
   const widget = useStore((s) => s.widgets[widgetId])
   const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
@@ -53,7 +54,7 @@ export const BaseWidget = memo(function BaseWidget({
       if (e.button === 0) {
         if (e.shiftKey || e.metaKey || e.ctrlKey) {
           if (isSelected) {
-            removeFromSelection(widgetId)
+            pendingDeselect.current = { x: e.clientX, y: e.clientY }
           } else {
             addToSelection(widgetId)
           }
@@ -67,21 +68,32 @@ export const BaseWidget = memo(function BaseWidget({
       // Middle-button (pan) is left to bubble to the canvas gesture handler,
       // which starts a pan from anywhere, including over widgets.
     },
-    [selectWidget, addToSelection, removeFromSelection, widgetId, isSelected]
+    [selectWidget, addToSelection, widgetId, isSelected]
   )
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     const pending = pendingCollapse.current
     pendingCollapse.current = null
-    if (!pending) return
-    const dist = Math.hypot(e.clientX - pending.x, e.clientY - pending.y)
-    if (dist < 4) {
-      selectWidget(widgetId)
+    if (pending) {
+      const dist = Math.hypot(e.clientX - pending.x, e.clientY - pending.y)
+      if (dist < 4) {
+        selectWidget(widgetId)
+      }
     }
-  }, [selectWidget, widgetId])
+
+    const pendingDeselectPos = pendingDeselect.current
+    pendingDeselect.current = null
+    if (pendingDeselectPos) {
+      const dist = Math.hypot(e.clientX - pendingDeselectPos.x, e.clientY - pendingDeselectPos.y)
+      if (dist < 4) {
+        removeFromSelection(widgetId)
+      }
+    }
+  }, [selectWidget, removeFromSelection, widgetId])
 
   const handlePointerCancel = useCallback(() => {
     pendingCollapse.current = null
+    pendingDeselect.current = null
   }, [])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
