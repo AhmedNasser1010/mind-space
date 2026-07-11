@@ -208,6 +208,43 @@ describe("copyWidgets / pasteWidgets", () => {
   })
 })
 
+describe("duplicateWidgetsAt", () => {
+  it("clones in place, no title suffix, selects new ids, appends to widgetOrder, returns ids", () => {
+    const newIds = useStore.getState().duplicateWidgetsAt("s1", ["w1"])
+    const state = useStore.getState()
+    expect(newIds).toHaveLength(1)
+    expect(newIds[0]).not.toBe("w1")
+    const clone = state.widgets[newIds[0]]
+    expect(clone.x).toBe(0)
+    expect(clone.y).toBe(0)
+    expect(clone.title).toBe("w")
+    expect(state.selectedWidgetIds).toEqual(newIds)
+    expect(state.sheets[0].widgetOrder).toEqual(["w1", ...newIds])
+  })
+
+  it("records one undo entry; undo removes clones, redo re-adds them at their final moved position", () => {
+    useStore.getState().recordSnapshot()
+    const cloneIds = useStore.getState().duplicateWidgetsAt("s1", ["w1"])
+    expect(useStore.getState().undoStack).toHaveLength(1)
+
+    useStore.getState().moveWidget(cloneIds[0], 10, 20)
+    useStore.getState().moveWidget(cloneIds[0], 40, 50)
+    expect(useStore.getState().undoStack).toHaveLength(1)
+
+    useStore.getState().undo()
+    let state = useStore.getState()
+    expect(state.widgets[cloneIds[0]]).toBeUndefined()
+    expect(state.widgets.w1.x).toBe(0)
+    expect(state.widgets.w1.y).toBe(0)
+
+    useStore.getState().redo()
+    state = useStore.getState()
+    expect(state.widgets[cloneIds[0]]).toBeDefined()
+    expect(state.widgets[cloneIds[0]].x).toBe(40)
+    expect(state.widgets[cloneIds[0]].y).toBe(50)
+  })
+})
+
 describe("setSelection", () => {
   it("replaces selectedWidgetIds and does not push an undo entry", () => {
     useStore.setState({ selectedWidgetIds: ["w1"] })
