@@ -30,6 +30,7 @@ interface StoreState {
 
   addWidget: (sheetId: string, widget: Widget) => void
   updateWidget: (id: string, updates: Partial<Widget>) => void
+  updateWidgets: (ids: string[], updates: Partial<Widget>) => void
   updateWidgetSilent: (id: string, updates: Partial<Widget>) => void
   recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
@@ -493,6 +494,22 @@ export const useStore = create<StoreState>()(
           const widgets = {
             ...state.widgets,
             [id]: { ...widget, ...updates },
+          }
+          return {
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
+          }
+        })
+      },
+
+      updateWidgets: (ids, updates) => {
+        set((state) => {
+          const prevTrio = trioOf(state)
+          const widgets = { ...state.widgets }
+          for (const id of ids) {
+            const widget = widgets[id]
+            if (!widget) continue
+            widgets[id] = { ...widget, ...updates }
           }
           return {
             widgets,
