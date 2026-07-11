@@ -364,11 +364,16 @@ export const useStore = create<StoreState>()(
       },
 
       reorderSheetWidgets: (sheetId, widgetOrder) => {
-        set((state) => ({
-          sheets: state.sheets.map((s) =>
-            s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
-          ),
-        }))
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
       },
 
       addWidget: (sheetId, widget) => {
