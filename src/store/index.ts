@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings } from "@/types"
+import type { BackupFile } from "@/lib/backup"
 
 interface ClipboardData {
   widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
@@ -12,6 +13,18 @@ interface Snapshot {
   sheets: Sheet[]
   widgets: Record<string, Widget>
   currentSheetId: string | null
+}
+
+export const PERSIST_VERSION = 1
+
+export function migrate(persisted: unknown, version: number) {
+  const state = persisted as Record<string, unknown>
+  if (version < 1) {
+    // v0 blobs carried full undo/redo history; strip it.
+    delete state.undoStack
+    delete state.redoStack
+  }
+  return state
 }
 
 interface StoreState {
@@ -56,6 +69,8 @@ interface StoreState {
 
   copyWidgets: (sheetId: string, widgetIds: string[]) => void
   pasteWidgets: (sheetId: string) => void
+
+  importState: (backup: BackupFile) => void
 
   undo: () => void
   redo: () => void
@@ -706,6 +721,40 @@ export const useStore = create<StoreState>()(
         })
       },
 
+      importState: (backup) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+
+          let sheets = backup.sheets
+          let widgets = backup.widgets
+          let currentSheetId = backup.currentSheetId
+
+          if (backup.version < PERSIST_VERSION) {
+            const migrated = migrate({ sheets, widgets, currentSheetId }, backup.version) as {
+              sheets: Sheet[]
+              widgets: Record<string, Widget>
+              currentSheetId: string | null
+            }
+            sheets = migrated.sheets
+            widgets = migrated.widgets
+            currentSheetId = migrated.currentSheetId
+          }
+
+          const resolvedCurrentSheetId = sheets.some((s) => s.id === currentSheetId)
+            ? currentSheetId
+            : sheets[0]?.id ?? null
+
+          return {
+            sheets,
+            widgets,
+            currentSheetId: resolvedCurrentSheetId,
+            selectedWidgetIds: [],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
       undo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (undoStack.length === 0) return
@@ -735,16 +784,8 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: 1,
-      migrate: (persisted: unknown, version: number) => {
-        const state = persisted as Record<string, unknown>
-        if (version < 1) {
-          // v0 blobs carried full undo/redo history; strip it.
-          delete state.undoStack
-          delete state.redoStack
-        }
-        return state
-      },
+      version: PERSIST_VERSION,
+      migrate,
       partialize: (state) => ({
         sheets: state.sheets,
         currentSheetId: state.currentSheetId,
