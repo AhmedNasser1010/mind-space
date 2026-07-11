@@ -1,6 +1,6 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useState } from "react"
 import { ContextMenu } from "@base-ui/react/context-menu"
 import { useStore } from "@/store"
 import { Copy, Trash2, Palette, ChevronRight, Pencil } from "lucide-react"
@@ -24,6 +24,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
   onStartRename,
   children,
 }: WidgetContextMenuProps) {
+  const [open, setOpen] = useState(false)
   const isMulti = useStore(
     (s) => s.selectedWidgetIds.includes(widgetId) && s.selectedWidgetIds.length > 1
   )
@@ -40,6 +41,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
     } else {
       s.updateWidget(widgetId, { colorTheme })
     }
+    setOpen(false)
   }
 
   function duplicate() {
@@ -62,11 +64,17 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
     }
   }
 
+  // The popups portal to body in the DOM but stay inside the canvas React
+  // tree, so pointerdowns on menu items would bubble (through the React tree)
+  // to the canvas marquee handler and deselect everything mid-click, swapping
+  // the multi-select items out from under the click.
+  const blockCanvasGestures = (e: React.PointerEvent) => e.stopPropagation()
+
   return (
-    <ContextMenu.Root>
+    <ContextMenu.Root open={open} onOpenChange={setOpen}>
       <ContextMenu.Trigger render={children} />
       <ContextMenu.Portal>
-        <ContextMenu.Positioner>
+        <ContextMenu.Positioner onPointerDown={blockCanvasGestures}>
           <ContextMenu.Popup className={popupClass}>
             {!isMulti && (
               <ContextMenu.Item className={itemClass} onClick={onStartRename}>
@@ -86,7 +94,12 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
                 <ChevronRight className="h-3.5 w-3.5 ml-auto" />
               </ContextMenu.SubmenuTrigger>
               <ContextMenu.Portal>
-                <ContextMenu.Positioner side="right" alignOffset={-4} sideOffset={-4}>
+                <ContextMenu.Positioner
+                  side="right"
+                  alignOffset={-4}
+                  sideOffset={-4}
+                  onPointerDown={blockCanvasGestures}
+                >
                   <ContextMenu.Popup className={popupClass}>
                     <WidgetColorPalette currentId={widget.colorTheme} onSelect={applyColor} />
                   </ContextMenu.Popup>
