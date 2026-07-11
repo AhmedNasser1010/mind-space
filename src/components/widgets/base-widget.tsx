@@ -59,8 +59,10 @@ export const BaseWidget = memo(function BaseWidget({
         } else {
           selectWidget(widgetId)
         }
+        e.stopPropagation()
       }
-      e.stopPropagation()
+      // Middle-button (pan) is left to bubble to the canvas gesture handler,
+      // which starts a pan from anywhere, including over widgets.
     },
     [selectWidget, addToSelection, removeFromSelection, widgetId, isSelected]
   )
