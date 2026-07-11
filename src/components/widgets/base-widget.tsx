@@ -50,7 +50,7 @@ export const BaseWidget = memo(function BaseWidget({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button === 0) {
-        if (e.shiftKey) {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
           if (isSelected) {
             removeFromSelection(widgetId)
           } else {
