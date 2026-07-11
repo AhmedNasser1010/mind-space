@@ -32,7 +32,7 @@ export const BaseWidget = memo(function BaseWidget({
   const renameInputRef = useRef<HTMLInputElement>(null)
 
   const widget = useStore((s) => s.widgets[widgetId])
-  const selectedWidgetIds = useStore((s) => s.selectedWidgetIds)
+  const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
   const selectWidget = useStore((s) => s.selectWidget)
   const addToSelection = useStore((s) => s.addToSelection)
   const removeFromSelection = useStore((s) => s.removeFromSelection)
@@ -41,8 +41,6 @@ export const BaseWidget = memo(function BaseWidget({
 
   const { resolvedTheme } = useTheme()
   const dragHandlers = useWidgetDrag(widgetId)
-
-  const isSelected = selectedWidgetIds.includes(widgetId)
 
   const themeVars = useMemo(
     () => getThemeVariables(widget?.colorTheme, resolvedTheme === "dark"),
