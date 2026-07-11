@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import { ContextMenu } from "@base-ui/react/context-menu"
 import { useStore } from "@/store"
 import { Copy, Trash2, Palette, ChevronRight, Pencil } from "lucide-react"
@@ -17,7 +17,7 @@ const itemClass =
 const destructiveItemClass =
   "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none data-[highlighted]:bg-destructive/10 transition-colors"
 const popupClass =
-  "z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md outline-none"
+  "pointer-events-auto z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md outline-none"
 
 export const WidgetContextMenu = memo(function WidgetContextMenu({
   widgetId,
@@ -30,6 +30,20 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
   )
   const count = useStore((s) => s.selectedWidgetIds.length)
   const widget = useStore((s) => s.widgets[widgetId])
+
+  // Base UI's ContextMenu.Root has no `modal` prop (unlike Menu.Root), so it
+  // never locks pointer-events outside the menu the way Radix does. Without
+  // this, the page behind the menu stays hover/pointer-interactive even
+  // though it's marked aria-hidden. Lock body pointer-events while open and
+  // restore on close/unmount so we never leave the app dead.
+  useEffect(() => {
+    if (!open) return
+    const previous = document.body.style.pointerEvents
+    document.body.style.pointerEvents = "none"
+    return () => {
+      document.body.style.pointerEvents = previous
+    }
+  }, [open])
 
   if (!widget) return children
 
