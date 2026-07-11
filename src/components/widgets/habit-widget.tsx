@@ -72,6 +72,7 @@ export const HabitWidget = memo(function HabitWidget({ widgetId }: { widgetId: s
   const [viewDate, setViewDate] = useState(() => new Date())
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState("")
+  const [popping, setPopping] = useState(false)
 
   const data = useMemo(() => getWidgetData<HabitData>(widget), [widget])
   const habitName = data.habitName ?? "Coding"
@@ -228,13 +229,18 @@ export const HabitWidget = memo(function HabitWidget({ widgetId }: { widgetId: s
         <button
           onClick={(e) => {
             e.stopPropagation()
+            if (!isTodayCompleted) setPopping(true)
             toggleToday()
           }}
+          onAnimationEnd={(e) => {
+            if (e.animationName === "habit-pop") setPopping(false)
+          }}
           className={cn(
-            "flex h-12 w-12 items-center justify-center rounded-full transition-all",
+            "flex h-12 w-12 items-center justify-center rounded-full transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]",
             isTodayCompleted
               ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground"
+              : "bg-muted text-muted-foreground hover:bg-primary hover:text-primary-foreground",
+            popping && "habit-pop"
           )}
           title={isTodayCompleted ? "Mark incomplete" : "Log completed session"}
           aria-label={isTodayCompleted ? "Mark incomplete" : "Log completed session"}

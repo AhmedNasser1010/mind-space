@@ -23,6 +23,7 @@ export function Canvas() {
   const widgetsRecord = useStore((s) => s.widgets)
   const canvasState = useStore((s) => s.canvasState)
   const setCanvasState = useStore((s) => s.setCanvasState)
+  const canvasAnimating = useStore((s) => s.canvasAnimating)
 
   useKeyboardShortcuts(containerRef)
 
@@ -45,6 +46,7 @@ export function Canvas() {
   const deselectAll = useStore((s) => s.deselectAll)
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (useStore.getState().canvasAnimating) useStore.getState().setCanvasAnimating(false)
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
     if (activePointers.current.size === 2) {
@@ -199,6 +201,7 @@ export function Canvas() {
           transform: `translate(${canvasState.offsetX}px, ${canvasState.offsetY}px) scale(${canvasState.scale})`,
           transformOrigin: "0 0",
           willChange: "transform",
+          transition: canvasAnimating ? "transform 200ms var(--ease-in-out)" : "none",
         }}
       >
         {sheetWidgets.map((widget) => {
