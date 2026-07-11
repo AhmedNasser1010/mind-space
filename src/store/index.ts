@@ -39,6 +39,7 @@ interface StoreState {
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
   duplicateWidgets: (sheetId: string, widgetIds: string[]) => void
+  duplicateWidgetsAt: (sheetId: string, widgetIds: string[]) => string[]
   toggleCollapse: (id: string) => void
   renameWidget: (id: string, title: string) => void
 
@@ -666,6 +667,47 @@ export const useStore = create<StoreState>()(
             ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
+      },
+
+      duplicateWidgetsAt: (sheetId, widgetIds) => {
+        const state = get()
+        const sheet = state.sheets.find((s) => s.id === sheetId)
+        if (!sheet) return []
+        const prevTrio = trioOf(state)
+        const maxZ = Math.max(
+          ...Object.values(state.widgets).map((w) => w.zIndex),
+          0
+        )
+        const newWidgets: Record<string, Widget> = {}
+        const newIds: string[] = []
+        widgetIds.forEach((id, index) => {
+          const original = state.widgets[id]
+          if (!original) return
+          const duplicate: Widget = {
+            ...original,
+            id: crypto.randomUUID(),
+            zIndex: maxZ + 1 + index,
+          }
+          newWidgets[duplicate.id] = duplicate
+          newIds.push(duplicate.id)
+        })
+        const widgets = { ...state.widgets, ...newWidgets }
+        const sheets = state.sheets.map((s) =>
+          s.id === sheetId
+            ? {
+                ...s,
+                widgetOrder: [...s.widgetOrder, ...newIds],
+                updatedAt: Date.now(),
+              }
+            : s
+        )
+        set({
+          widgets,
+          sheets,
+          selectedWidgetIds: newIds,
+          ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
+        })
+        return newIds
       },
 
       duplicateWidget: (sheetId, widgetId) => {
