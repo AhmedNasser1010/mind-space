@@ -1,202 +1,106 @@
 "use client"
 
-import { memo, useEffect, useRef, useState } from "react"
+import { memo } from "react"
+import { ContextMenu } from "@base-ui/react/context-menu"
 import { useStore } from "@/store"
-import { Copy, Trash2, Palette, ChevronLeft } from "lucide-react"
+import { Copy, Trash2, Palette, ChevronRight, Pencil } from "lucide-react"
 import { WidgetColorPalette } from "./widget-color-palette"
 
 interface WidgetContextMenuProps {
   widgetId: string
-  open: boolean
-  x: number
-  y: number
-  onClose: () => void
   onStartRename: () => void
+  children: React.ReactElement
 }
 
-function handleAction(
-  widgetId: string,
-  selectedIds: string[],
-  onClose: () => void,
-  action: (id: string) => void,
-  multiAction?: (ids: string[]) => void
-) {
-  const isMulti = selectedIds.includes(widgetId) && selectedIds.length > 1
-  if (isMulti && multiAction) {
-    multiAction(selectedIds)
-  } else {
-    action(widgetId)
-  }
-  onClose()
-}
-
-function useOutsideClick(ref: React.RefObject<HTMLDivElement | null>, open: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!open) return
-    function handler(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        onClose()
-      }
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [open, onClose, ref])
-}
-
-function useMenuKeyboard(
-  ref: React.RefObject<HTMLDivElement | null>,
-  open: boolean,
-  onClose: () => void
-) {
-  useEffect(() => {
-    if (!open) return
-    const menu = ref.current
-    if (!menu) return
-    const firstButton = menu.querySelector("button") as HTMLButtonElement | null
-    firstButton?.focus()
-
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose()
-        return
-      }
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        e.preventDefault()
-        const buttons = menu.querySelectorAll("button")
-        const current = document.activeElement as HTMLButtonElement | null
-        const currentIndex = Array.from(buttons).indexOf(current!)
-        const nextIndex =
-          e.key === "ArrowDown"
-            ? Math.min(currentIndex + 1, buttons.length - 1)
-            : Math.max(currentIndex - 1, 0)
-        ;(buttons[nextIndex] as HTMLButtonElement)?.focus()
-      }
-    }
-    document.addEventListener("keydown", handler)
-    return () => document.removeEventListener("keydown", handler)
-  }, [open, onClose, ref])
-}
+const itemClass =
+  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground transition-colors"
+const destructiveItemClass =
+  "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive outline-none data-[highlighted]:bg-destructive/10 transition-colors"
+const popupClass =
+  "z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md outline-none"
 
 export const WidgetContextMenu = memo(function WidgetContextMenu({
   widgetId,
-  open,
-  x,
-  y,
-  onClose,
   onStartRename,
+  children,
 }: WidgetContextMenuProps) {
-  const ref = useRef<HTMLDivElement>(null)
   const selectedWidgetIds = useStore((s) => s.selectedWidgetIds)
   const widget = useStore((s) => s.widgets[widgetId])
-  const [showPalette, setShowPalette] = useState(false)
 
-  useEffect(() => {
-    if (!open) setShowPalette(false)
-  }, [open])
+  if (!widget) return children
 
-  useOutsideClick(ref, open, onClose)
-  useMenuKeyboard(ref, open, onClose)
+  const isMulti = selectedWidgetIds.includes(widgetId) && selectedWidgetIds.length > 1
+  const count = selectedWidgetIds.length
 
-  if (!open) return null
+  function applyColor(id: string) {
+    const s = useStore.getState()
+    const colorTheme = id === "default" ? undefined : id
+    if (isMulti) {
+      s.updateWidgets(selectedWidgetIds, { colorTheme })
+    } else {
+      s.updateWidget(widgetId, { colorTheme })
+    }
+  }
+
+  function duplicate() {
+    const s = useStore.getState()
+    if (!s.currentSheetId) return
+    if (isMulti) {
+      s.duplicateWidgets(s.currentSheetId, selectedWidgetIds)
+    } else {
+      s.duplicateWidget(s.currentSheetId, widgetId)
+    }
+  }
+
+  function remove() {
+    const s = useStore.getState()
+    if (!s.currentSheetId) return
+    if (isMulti) {
+      s.deleteWidgets(s.currentSheetId, selectedWidgetIds)
+    } else {
+      s.deleteWidget(s.currentSheetId, widgetId)
+    }
+  }
 
   return (
-    <div
-      ref={ref}
-      role="menu"
-      className="fixed z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md"
-      style={{ left: x, top: y }}
-    >
-      {showPalette ? (
-        <>
-          <button
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={() => setShowPalette(false)}
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
-          <div className="h-px bg-border my-1" />
-          <WidgetColorPalette
-            currentId={widget?.colorTheme}
-            onSelect={(id) => {
-              useStore.getState().updateWidget(widgetId, {
-                colorTheme: id === "default" ? undefined : id,
-              })
-              onClose()
-            }}
-          />
-        </>
-      ) : (
-        <>
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={() => {
-              onStartRename()
-              onClose()
-            }}
-          >
-            <svg
-              className="h-3.5 w-3.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-            </svg>
-            Rename
-          </button>
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={() => {
-              const s = useStore.getState()
-              if (!s.currentSheetId) return
-              handleAction(
-                widgetId,
-                selectedWidgetIds,
-                onClose,
-                (id) => s.duplicateWidget(s.currentSheetId!, id),
-                (ids) => s.duplicateWidgets(s.currentSheetId!, ids)
-              )
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            Duplicate
-          </button>
-          <div className="h-px bg-border my-1" />
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
-            onClick={() => setShowPalette(true)}
-          >
-            <Palette className="h-3.5 w-3.5" />
-            Color
-          </button>
-          <div className="h-px bg-border my-1" />
-          <button
-            role="menuitem"
-            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-            onClick={() => {
-              const s = useStore.getState()
-              if (!s.currentSheetId) return
-              handleAction(
-                widgetId,
-                selectedWidgetIds,
-                onClose,
-                (id) => s.deleteWidget(s.currentSheetId!, id),
-                (ids) => s.deleteWidgets(s.currentSheetId!, ids)
-              )
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </button>
-        </>
-      )}
-    </div>
+    <ContextMenu.Root>
+      <ContextMenu.Trigger render={children} />
+      <ContextMenu.Portal>
+        <ContextMenu.Positioner>
+          <ContextMenu.Popup className={popupClass}>
+            {!isMulti && (
+              <ContextMenu.Item className={itemClass} onClick={onStartRename}>
+                <Pencil className="h-3.5 w-3.5" />
+                Rename
+              </ContextMenu.Item>
+            )}
+            <ContextMenu.Item className={itemClass} onClick={duplicate}>
+              <Copy className="h-3.5 w-3.5" />
+              {isMulti ? `Duplicate ${count} widgets` : "Duplicate"}
+            </ContextMenu.Item>
+            <ContextMenu.Separator className="h-px bg-border my-1" />
+            <ContextMenu.SubmenuRoot>
+              <ContextMenu.SubmenuTrigger className={itemClass} openOnHover>
+                <Palette className="h-3.5 w-3.5" />
+                Color
+                <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+              </ContextMenu.SubmenuTrigger>
+              <ContextMenu.Portal>
+                <ContextMenu.Positioner side="right" alignOffset={-4} sideOffset={-4}>
+                  <ContextMenu.Popup className={popupClass}>
+                    <WidgetColorPalette currentId={widget.colorTheme} onSelect={applyColor} />
+                  </ContextMenu.Popup>
+                </ContextMenu.Positioner>
+              </ContextMenu.Portal>
+            </ContextMenu.SubmenuRoot>
+            <ContextMenu.Separator className="h-px bg-border my-1" />
+            <ContextMenu.Item className={destructiveItemClass} onClick={remove}>
+              <Trash2 className="h-3.5 w-3.5" />
+              {isMulti ? `Delete ${count} widgets` : "Delete"}
+            </ContextMenu.Item>
+          </ContextMenu.Popup>
+        </ContextMenu.Positioner>
+      </ContextMenu.Portal>
+    </ContextMenu.Root>
   )
 })
