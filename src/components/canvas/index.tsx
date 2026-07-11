@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ZoomControls } from "./zoom-controls"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
+import { MarqueeOverlay } from "./marquee-overlay"
 import { LayoutTemplate } from "lucide-react"
 
 const CanvasWidget = memo(function CanvasWidget({ widgetId }: { widgetId: string }) {
@@ -93,6 +94,7 @@ export function Canvas() {
         {widgetOrder?.map((id) => (
           <CanvasWidget key={id} widgetId={id} />
         ))}
+        <MarqueeOverlay />
       </div>
 
       {widgetOrder?.length === 0 && currentSheetId && (
