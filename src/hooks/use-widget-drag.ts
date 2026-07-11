@@ -45,18 +45,28 @@ export function useWidgetDrag(widgetId: string) {
             ? selectedIds
             : [widgetId]
 
+        if (e.altKey) {
+          const sheetId = state.currentSheetId
+          if (sheetId) {
+            const cloneIds = useStore.getState().duplicateWidgetsAt(sheetId, dragIds.current)
+            if (cloneIds.length > 0) dragIds.current = cloneIds
+          }
+        }
+
+        const postState = useStore.getState()
+
         for (const id of dragIds.current) {
-          const w = state.widgets[id]
+          const w = postState.widgets[id]
           if (w) {
             widgetsStart.current[id] = { x: w.x, y: w.y }
           }
         }
 
         const dragIdSet = new Set(dragIds.current)
-        const sheet = state.sheets.find((s) => s.id === state.currentSheetId)
+        const sheet = postState.sheets.find((s) => s.id === postState.currentSheetId)
         candidates.current = (sheet?.widgetOrder ?? [])
           .filter((id) => !dragIdSet.has(id))
-          .map((id) => state.widgets[id])
+          .map((id) => postState.widgets[id])
           .filter((w): w is NonNullable<typeof w> => Boolean(w))
           .map((w) => ({ x: w.x, y: w.y, width: w.width, height: w.height }))
 
@@ -65,7 +75,7 @@ export function useWidgetDrag(widgetId: string) {
         let maxX = -Infinity
         let maxY = -Infinity
         for (const id of dragIds.current) {
-          const w = state.widgets[id]
+          const w = postState.widgets[id]
           if (!w) continue
           minX = Math.min(minX, w.x)
           minY = Math.min(minY, w.y)
@@ -75,16 +85,23 @@ export function useWidgetDrag(widgetId: string) {
         unionStart.current = { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
       }
 
-      const dx =
+      let dx =
         (e.clientX - startPos.current.x) / state.canvasState.scale
-      const dy =
+      let dy =
         (e.clientY - startPos.current.y) / state.canvasState.scale
+
+      let lockedAxis: "x" | "y" | null = null
+      if (e.shiftKey) {
+        lockedAxis = Math.abs(dx) < Math.abs(dy) ? "x" : "y"
+        if (lockedAxis === "x") dx = 0
+        else dy = 0
+      }
 
       const snapEnabled = state.canvasState.snapToObjects !== false && !(e.metaKey || e.ctrlKey)
       let snapDx = 0
       let snapDy = 0
-      let snappedX = false
-      let snappedY = false
+      let snappedX = lockedAxis === "x"
+      let snappedY = lockedAxis === "y"
       if (snapEnabled) {
         const movingNow: Rect = {
           x: unionStart.current.x + dx,
@@ -92,11 +109,11 @@ export function useWidgetDrag(widgetId: string) {
           width: unionStart.current.width,
           height: unionStart.current.height,
         }
-        const result = computeSnap(movingNow, candidates.current, SNAP_THRESHOLD_PX / state.canvasState.scale)
+        const result = computeSnap(movingNow, candidates.current, SNAP_THRESHOLD_PX / state.canvasState.scale, lockedAxis ?? undefined)
         snapDx = result.dx
         snapDy = result.dy
-        snappedX = result.snappedX
-        snappedY = result.snappedY
+        snappedX = snappedX || result.snappedX
+        snappedY = snappedY || result.snappedY
         setGuides(result.guides)
       } else {
         setGuides([])

@@ -85,12 +85,12 @@ function collectGuides(
   return guides
 }
 
-export function computeSnap(moving: Rect, candidates: Rect[], threshold: number): SnapResult {
+export function computeSnap(moving: Rect, candidates: Rect[], threshold: number, lockedAxis?: "x" | "y"): SnapResult {
   const movingXEdges = edgesX(moving)
   const movingYEdges = edgesY(moving)
 
-  const xSnap = findAxisSnap(movingXEdges, candidates, edgesX, threshold)
-  const ySnap = findAxisSnap(movingYEdges, candidates, edgesY, threshold)
+  const xSnap = lockedAxis === "x" ? { delta: 0, matched: false } : findAxisSnap(movingXEdges, candidates, edgesX, threshold)
+  const ySnap = lockedAxis === "y" ? { delta: 0, matched: false } : findAxisSnap(movingYEdges, candidates, edgesY, threshold)
 
   if (!xSnap.matched && !ySnap.matched) {
     return { dx: 0, dy: 0, snappedX: false, snappedY: false, guides: [] }
