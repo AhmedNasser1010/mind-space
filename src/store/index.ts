@@ -726,7 +726,13 @@ export const useStore = create<StoreState>()(
       undo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (undoStack.length === 0) return
-        const previous: Snapshot = JSON.parse(undoStack[undoStack.length - 1])
+        let previous: Snapshot
+        try {
+          previous = JSON.parse(undoStack[undoStack.length - 1])
+        } catch {
+          set({ undoStack: undoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...previous,
@@ -739,7 +745,13 @@ export const useStore = create<StoreState>()(
       redo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (redoStack.length === 0) return
-        const next: Snapshot = JSON.parse(redoStack[redoStack.length - 1])
+        let next: Snapshot
+        try {
+          next = JSON.parse(redoStack[redoStack.length - 1])
+        } catch {
+          set({ redoStack: redoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...next,
