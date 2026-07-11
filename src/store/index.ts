@@ -35,6 +35,7 @@ interface StoreState {
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
+  moveWidgets: (moves: { id: string; x: number; y: number }[]) => void
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
   duplicateWidgets: (sheetId: string, widgetIds: string[]) => void
@@ -577,6 +578,24 @@ export const useStore = create<StoreState>()(
           const widgets = {
             ...state.widgets,
             [id]: { ...widget, x, y },
+          }
+          if (!pendingSnapshot) {
+            return { widgets }
+          }
+          return {
+            widgets,
+            ...pushHistoryEntry(state, trioOf(state), { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
+          }
+        })
+      },
+
+      moveWidgets: (moves) => {
+        set((state) => {
+          const widgets = { ...state.widgets }
+          for (const { id, x, y } of moves) {
+            const widget = widgets[id]
+            if (!widget) continue
+            widgets[id] = { ...widget, x, y }
           }
           if (!pendingSnapshot) {
             return { widgets }

@@ -103,6 +103,7 @@ export function useWidgetDrag(widgetId: string) {
       }
 
       const grid = state.canvasState.gridSize
+      const batch: { id: string; x: number; y: number }[] = []
       for (const [id, start] of Object.entries(widgetsStart.current)) {
         let newX = start.x + dx + snapDx
         let newY = start.y + dy + snapDy
@@ -112,8 +113,9 @@ export function useWidgetDrag(widgetId: string) {
           if (!snappedY) newY = Math.round(newY / grid) * grid
         }
 
-        state.moveWidget(id, newX, newY)
+        batch.push({ id, x: newX, y: newY })
       }
+      state.moveWidgets(batch)
     },
     [widgetId]
   )
