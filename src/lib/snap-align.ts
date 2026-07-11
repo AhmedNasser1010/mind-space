@@ -118,9 +118,13 @@ interface GapMatch {
   guides: GuideLine[]
 }
 
-function gapGuideLine(axis: "x" | "y", gap: Gap): GuideLine {
+function gapGuideLine(primaryAxis: "x" | "y", gap: Gap): GuideLine {
+  // A gap on the X primary axis is a horizontal span (drawn as axis "y": fixed
+  // Y position, spanning X); a gap on Y is drawn as axis "x". This is the
+  // opposite of the primary axis, since GuideLine.axis encodes line
+  // orientation (line's fixed coordinate), not which axis the gap spans.
   return {
-    axis,
+    axis: primaryAxis === "x" ? "y" : "x",
     position: (gap.breadthMin + gap.breadthMax) / 2,
     start: gap.start,
     end: gap.end,

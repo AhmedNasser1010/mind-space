@@ -203,4 +203,26 @@ describe("computeSnap with gaps", () => {
     expect(guide!.end).toBe(300)
     expect(guide!.position).toBe(50) // midline of breadth 0-100
   })
+
+  it("gap guide on the x-primary axis renders as a horizontal line (axis 'y')", () => {
+    // A/B gap is along X, so the equal-spacing indicator is a horizontal
+    // line (fixed Y at the breadth midline, spanning the X gap) - the
+    // opposite render axis from an X point-snap's vertical line.
+    const moving = rect(140, 0, 100, 100)
+    const result = computeSnap(moving, [a, b], 15, undefined, gaps)
+    const guide = result.guides.find((g) => g.kind === "gap")
+    expect(guide!.axis).toBe("y")
+  })
+
+  it("gap guide on the y-primary axis renders as a vertical line (axis 'x')", () => {
+    const c = rect(0, 0, 100, 100) // y: 0-100
+    const d = rect(0, 300, 100, 100) // y: 300-400, gap y: 100-300
+    const yGaps = computeGaps([c, d])
+    // moving centered in the y-gap (center 200) with x overlapping c/d's x breadth 0-100.
+    const moving = rect(0, 140, 100, 100)
+    const result = computeSnap(moving, [c, d], 15, undefined, yGaps)
+    const guide = result.guides.find((g) => g.kind === "gap")
+    expect(guide).toBeDefined()
+    expect(guide!.axis).toBe("x")
+  })
 })
