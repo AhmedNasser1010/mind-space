@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { useStore } from "@/store"
+import { useStore, migratePersistedState } from "@/store"
 import { WidgetType, type Widget } from "@/types"
 
 function makeWidget(id: string, overrides: Partial<Widget> = {}): Widget {
@@ -177,5 +177,23 @@ describe("deleteWidgets", () => {
     expect(state.widgets.w1).toBeUndefined()
     expect(state.sheets[0].widgetOrder).not.toContain("w1")
     expect(state.selectedWidgetIds).not.toContain("w1")
+  })
+})
+
+describe("migratePersistedState", () => {
+  it("sets canvasState.snapToObjects to true when migrating a v3 blob missing the key", () => {
+    const persisted = {
+      canvasState: { offsetX: 0, offsetY: 0, scale: 1, gridEnabled: true, snapToGrid: true, gridSize: 20 },
+    }
+    const migrated = migratePersistedState(persisted, 3) as { canvasState: { snapToObjects: boolean } }
+    expect(migrated.canvasState.snapToObjects).toBe(true)
+  })
+
+  it("does not override an existing snapToObjects value", () => {
+    const persisted = {
+      canvasState: { offsetX: 0, offsetY: 0, scale: 1, gridEnabled: true, snapToGrid: true, gridSize: 20, snapToObjects: false },
+    }
+    const migrated = migratePersistedState(persisted, 3) as { canvasState: { snapToObjects: boolean } }
+    expect(migrated.canvasState.snapToObjects).toBe(false)
   })
 })
