@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, memo } from "react"
 import { useStore } from "@/store"
 import type { WidgetType } from "@/types"
 import { BaseWidget } from "@/components/widgets/base-widget"
@@ -9,6 +9,34 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ZoomControls } from "./zoom-controls"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { LayoutTemplate } from "lucide-react"
+
+const CanvasWidget = memo(function CanvasWidget({ widgetId }: { widgetId: string }) {
+  const type = useStore((s) => s.widgets[widgetId]?.type)
+  const title = useStore((s) => s.widgets[widgetId]?.title)
+
+  if (!type) return null
+
+  const WidgetComponent = widgetComponents[type as WidgetType]
+
+  return (
+    <div data-widget>
+      <BaseWidget widgetId={widgetId} hideTitle={type === "text"}>
+        {WidgetComponent ? (
+          <WidgetComponent widgetId={widgetId} />
+        ) : (
+          <div className="flex h-full flex-col p-4">
+            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
+              {type}
+            </span>
+            <span className="mt-1.5 text-sm font-semibold leading-tight">
+              {title}
+            </span>
+          </div>
+        )}
+      </BaseWidget>
+    </div>
+  )
+})
 
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -19,25 +47,11 @@ export function Canvas() {
   const initialPinchDist = useRef(0)
 
   const currentSheetId = useStore((s) => s.currentSheetId)
-  const sheets = useStore((s) => s.sheets)
-  const widgetsRecord = useStore((s) => s.widgets)
+  const widgetOrder = useStore((s) => s.sheets.find((sh) => sh.id === s.currentSheetId)?.widgetOrder)
   const canvasState = useStore((s) => s.canvasState)
   const setCanvasState = useStore((s) => s.setCanvasState)
 
   useKeyboardShortcuts(containerRef)
-
-  const currentSheet = useMemo(
-    () => sheets.find((s) => s.id === currentSheetId),
-    [sheets, currentSheetId]
-  )
-
-  const sheetWidgets = useMemo(
-    () =>
-      currentSheet?.widgetOrder
-        .map((id) => widgetsRecord[id])
-        .filter(Boolean) ?? [],
-    [currentSheet?.widgetOrder, widgetsRecord]
-  )
 
   const canvasStateRef = useRef(canvasState)
   canvasStateRef.current = canvasState // eslint-disable-line react-hooks/refs
@@ -201,30 +215,12 @@ export function Canvas() {
           willChange: "transform",
         }}
       >
-        {sheetWidgets.map((widget) => {
-          const WidgetComponent = widgetComponents[widget.type as WidgetType]
-          return (
-            <div key={widget.id} data-widget>
-              <BaseWidget widgetId={widget.id} hideTitle={widget.type === "text"}>
-                {WidgetComponent ? (
-                  <WidgetComponent widgetId={widget.id} />
-                ) : (
-                  <div className="flex h-full flex-col p-4">
-                    <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-                      {widget.type}
-                    </span>
-                    <span className="mt-1.5 text-sm font-semibold leading-tight">
-                      {widget.title}
-                    </span>
-                  </div>
-                )}
-              </BaseWidget>
-            </div>
-          )
-        })}
+        {widgetOrder?.map((id) => (
+          <CanvasWidget key={id} widgetId={id} />
+        ))}
       </div>
 
-      {sheetWidgets.length === 0 && currentSheetId && (
+      {widgetOrder?.length === 0 && currentSheetId && (
         <EmptyState
           icon={<LayoutTemplate className="h-6 w-6" />}
           title="Canvas is empty"
