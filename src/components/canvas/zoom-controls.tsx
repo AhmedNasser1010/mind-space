@@ -1,11 +1,14 @@
 "use client"
 
-import { memo, useCallback } from "react"
-import type { PointerEvent } from "react"
+import { memo, useCallback, useRef } from "react"
+import type { PointerEvent, ChangeEvent } from "react"
 import { useStore } from "@/store"
 import { IconButton } from "@/components/ui/icon-button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid3x3 } from "lucide-react"
+import { useConfirm } from "@/components/ui/confirm-dialog"
+import { useToast } from "@/components/ui/toast"
+import { buildBackup, downloadBackup, parseBackup } from "@/lib/backup"
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid3x3, Download, Upload } from "lucide-react"
 import { AddWidgetButton } from "./add-widget-button"
 
 function stopPropagation(e: PointerEvent) {
@@ -41,6 +44,10 @@ function zoomAtCenter(factor: number) {
 export const ZoomControls = memo(function ZoomControls() {
   const canvasState = useStore((s) => s.canvasState)
   const setCanvasState = useStore((s) => s.setCanvasState)
+  const importState = useStore((s) => s.importState)
+  const confirm = useConfirm()
+  const { addToast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const zoomPercent = Math.round(canvasState.scale * 100)
 
@@ -102,6 +109,51 @@ export const ZoomControls = memo(function ZoomControls() {
     setCanvasState({ snapToGrid: !cs.snapToGrid })
   }, [setCanvasState])
 
+  const exportBackup = useCallback(() => {
+    const { sheets, widgets, currentSheetId } = useStore.getState()
+    const backup = buildBackup(sheets, widgets, currentSheetId)
+    downloadBackup(backup)
+  }, [])
+
+  const triggerImport = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileSelected = useCallback(
+    async (e: ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      e.target.value = ""
+      if (!file) return
+
+      const text = await file.text()
+      let backup
+      try {
+        backup = parseBackup(text)
+      } catch (err) {
+        addToast({
+          title: "Import failed",
+          description: err instanceof Error ? err.message : "Unknown error",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const confirmed = await confirm({
+        title: "Import backup",
+        description:
+          "Replace all current sheets and widgets with this backup? Current data will be overwritten (undoable until you leave the page).",
+        confirmLabel: "Import",
+        cancelLabel: "Cancel",
+        variant: "destructive",
+      })
+      if (!confirmed) return
+
+      importState(backup)
+      addToast({ title: "Backup imported", variant: "success" })
+    },
+    [confirm, importState, addToast]
+  )
+
   return (
     <div
       className="absolute bottom-4 right-4 flex flex-col gap-0.5 rounded-lg border bg-background/80 backdrop-blur-sm p-1 shadow-sm"
@@ -143,6 +195,23 @@ export const ZoomControls = memo(function ZoomControls() {
       >
         <Grid3x3 className="h-4 w-4" />
       </IconButton>
+
+      <div className="h-px bg-border mx-1" />
+
+      <IconButton label="Export backup" size="md" onClick={exportBackup}>
+        <Download className="h-4 w-4" />
+      </IconButton>
+
+      <IconButton label="Import backup" size="md" onClick={triggerImport}>
+        <Upload className="h-4 w-4" />
+      </IconButton>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
 
       <div className="h-px bg-border mx-1" />
 
