@@ -152,13 +152,22 @@ function initializeDefaultState() {
 const debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 const pendingWrites = new Map<string, string>()
 
+let storageErrorReported = false
+function reportStorageError() {
+  if (storageErrorReported || typeof window === "undefined") return
+  storageErrorReported = true
+  window.dispatchEvent(new CustomEvent("mind-space:storage-error"))
+}
+
 export function flushPendingWrites() {
   for (const [name, value] of pendingWrites) {
     try {
       localStorage.setItem(name, value)
     } catch {
       /* storage full or unavailable */
+      reportStorageError()
     }
+    clearTimeout(debounceTimers[name])
   }
   pendingWrites.clear()
 }
@@ -189,6 +198,7 @@ const debouncedStorage = {
         localStorage.setItem(name, value)
       } catch {
         /* storage full or unavailable */
+        reportStorageError()
       }
     }, 300)
   },
@@ -725,14 +735,22 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
+      version: 1,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as Record<string, unknown>
+        if (version < 1) {
+          // v0 blobs carried full undo/redo history; strip it.
+          delete state.undoStack
+          delete state.redoStack
+        }
+        return state
+      },
       partialize: (state) => ({
         sheets: state.sheets,
         currentSheetId: state.currentSheetId,
         widgets: state.widgets,
         canvasState: state.canvasState,
         themeSettings: state.themeSettings,
-        undoStack: state.undoStack,
-        redoStack: state.redoStack,
         clipboard: state.clipboard,
       }),
       onRehydrateStorage: () => {
