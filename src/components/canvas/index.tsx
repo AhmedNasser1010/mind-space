@@ -11,11 +11,44 @@ import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
 import { LayoutTemplate } from "lucide-react"
 
-const CanvasWidget = memo(function CanvasWidget({ widgetId }: { widgetId: string }) {
-  const type = useStore((s) => s.widgets[widgetId]?.type)
-  const title = useStore((s) => s.widgets[widgetId]?.title)
+export function Canvas() {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const isPanning = useRef(false)
+  const lastPointer = useRef({ x: 0, y: 0 })
+  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const isPinching = useRef(false)
+  const initialPinchDist = useRef(0)
 
-  if (!type) return null
+  const currentSheetId = useStore((s) => s.currentSheetId)
+  const sheets = useStore((s) => s.sheets)
+  const widgetsRecord = useStore((s) => s.widgets)
+  const canvasState = useStore((s) => s.canvasState)
+  const setCanvasState = useStore((s) => s.setCanvasState)
+  const canvasAnimating = useStore((s) => s.canvasAnimating)
+
+  useKeyboardShortcuts(containerRef)
+
+  const currentSheet = useMemo(
+    () => sheets.find((s) => s.id === currentSheetId),
+    [sheets, currentSheetId]
+  )
+
+  const sheetWidgets = useMemo(
+    () =>
+      currentSheet?.widgetOrder
+        .map((id) => widgetsRecord[id])
+        .filter(Boolean) ?? [],
+    [currentSheet?.widgetOrder, widgetsRecord]
+  )
+
+  const canvasStateRef = useRef(canvasState)
+  canvasStateRef.current = canvasState // eslint-disable-line react-hooks/refs
+
+  const deselectAll = useStore((s) => s.deselectAll)
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    if (useStore.getState().canvasAnimating) useStore.getState().setCanvasAnimating(false)
+    activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
 
   const WidgetComponent = widgetComponents[type as WidgetType]
 
@@ -88,6 +121,7 @@ export function Canvas() {
           transform: `translate(${canvasState.offsetX}px, ${canvasState.offsetY}px) scale(${canvasState.scale})`,
           transformOrigin: "0 0",
           willChange: "transform",
+          transition: canvasAnimating ? "transform 200ms var(--ease-in-out)" : "none",
         }}
       >
         {widgetOrder?.map((id) => (

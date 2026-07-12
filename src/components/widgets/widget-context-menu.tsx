@@ -103,7 +103,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
     <div
       ref={ref}
       role="menu"
-      className="fixed z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md"
+      className="fixed z-50 min-w-[176px] rounded-lg border bg-popover p-1 shadow-md menu-enter origin-top-left"
       style={{ left: x, top: y }}
     >
       {showPalette ? (
@@ -187,8 +187,8 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
                 widgetId,
                 selectedWidgetIds,
                 onClose,
-                (id) => s.deleteWidget(s.currentSheetId!, id),
-                (ids) => s.deleteWidgets(s.currentSheetId!, ids)
+                (id) => s.deleteWidgetAnimated(s.currentSheetId!, id),
+                (ids) => s.deleteWidgetsAnimated(s.currentSheetId!, ids)
               )
             }}
           >
