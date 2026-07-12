@@ -3,7 +3,7 @@
 import { useCallback, useRef } from "react"
 import { useStore } from "@/store"
 import { useInteractionStore } from "@/store/interaction"
-import { computeSnap, SNAP_THRESHOLD_PX, type Rect } from "@/lib/snap-align"
+import { computeGaps, computeSnap, SNAP_THRESHOLD_PX, type Gap, type Rect } from "@/lib/snap-align"
 
 const setGuides = useInteractionStore.getState().setGuides
 
@@ -14,6 +14,7 @@ export function useWidgetDrag(widgetId: string) {
   const dragIds = useRef<string[]>([])
   const candidates = useRef<Rect[]>([])
   const unionStart = useRef<Rect>({ x: 0, y: 0, width: 0, height: 0 })
+  const gapsRef = useRef<{ x: Gap[]; y: Gap[] }>({ x: [], y: [] })
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -69,6 +70,7 @@ export function useWidgetDrag(widgetId: string) {
           .map((id) => postState.widgets[id])
           .filter((w): w is NonNullable<typeof w> => Boolean(w))
           .map((w) => ({ x: w.x, y: w.y, width: w.width, height: w.height }))
+        gapsRef.current = computeGaps(candidates.current)
 
         let minX = Infinity
         let minY = Infinity
@@ -109,7 +111,13 @@ export function useWidgetDrag(widgetId: string) {
           width: unionStart.current.width,
           height: unionStart.current.height,
         }
-        const result = computeSnap(movingNow, candidates.current, SNAP_THRESHOLD_PX / state.canvasState.scale, lockedAxis ?? undefined)
+        const result = computeSnap(
+          movingNow,
+          candidates.current,
+          SNAP_THRESHOLD_PX / state.canvasState.scale,
+          lockedAxis ?? undefined,
+          gapsRef.current
+        )
         snapDx = result.dx
         snapDy = result.dy
         snappedX = snappedX || result.snappedX
@@ -140,6 +148,7 @@ export function useWidgetDrag(widgetId: string) {
   const handlePointerUp = useCallback(() => {
     isDragging.current = false
     candidates.current = []
+    gapsRef.current = { x: [], y: [] }
     setGuides([])
   }, [])
 
