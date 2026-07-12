@@ -12,6 +12,19 @@ function stopPropagation(e: PointerEvent) {
   e.stopPropagation()
 }
 
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  )
+}
+
+function animateCanvas() {
+  if (prefersReducedMotion()) return
+  useStore.getState().setCanvasAnimating(true)
+  setTimeout(() => useStore.getState().setCanvasAnimating(false), 250)
+}
+
 function zoomAtCenter(factor: number) {
   const { canvasState: cs } = useStore.getState()
   const newScale = Math.min(Math.max(cs.scale * factor, 0.1), 5)
@@ -32,14 +45,17 @@ export const ZoomControls = memo(function ZoomControls() {
   const zoomPercent = Math.round(canvasState.scale * 100)
 
   const zoomIn = useCallback(() => {
+    animateCanvas()
     setCanvasState(zoomAtCenter(1.4))
   }, [setCanvasState])
 
   const zoomOut = useCallback(() => {
+    animateCanvas()
     setCanvasState(zoomAtCenter(1 / 1.4))
   }, [setCanvasState])
 
   const resetView = useCallback(() => {
+    animateCanvas()
     setCanvasState({ scale: 1, offsetX: 0, offsetY: 0 })
   }, [setCanvasState])
 
@@ -77,6 +93,7 @@ export const ZoomControls = memo(function ZoomControls() {
     const offsetX = (cw - (minX + maxX) * scale) / 2
     const offsetY = (ch - (minY + maxY) * scale) / 2
 
+    animateCanvas()
     setCanvasState({ scale, offsetX, offsetY })
   }, [setCanvasState])
 

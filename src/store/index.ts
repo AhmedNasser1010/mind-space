@@ -19,7 +19,10 @@ interface StoreState {
   currentSheetId: string | null
   widgets: Record<string, Widget>
   selectedWidgetIds: string[]
+  enteringWidgetIds: string[]
+  exitingWidgetIds: string[]
   canvasState: CanvasState
+  canvasAnimating: boolean
   themeSettings: ThemeSettings
   undoStack: string[]
   redoStack: string[]
@@ -39,6 +42,8 @@ interface StoreState {
   recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
+  deleteWidgetAnimated: (sheetId: string, widgetId: string) => void
+  deleteWidgetsAnimated: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
@@ -50,9 +55,11 @@ interface StoreState {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   deselectAll: () => void
+  clearEnteringWidget: (id: string) => void
 
   setCanvasState: (state: Partial<CanvasState>) => void
   resetCanvasView: () => void
+  setCanvasAnimating: (v: boolean) => void
 
   setThemeSettings: (settings: Partial<ThemeSettings>) => void
 
@@ -218,7 +225,10 @@ export const useStore = create<StoreState>()(
       currentSheetId: null,
       widgets: {},
       selectedWidgetIds: [],
+      enteringWidgetIds: [],
+      exitingWidgetIds: [],
       canvasState: defaultCanvasState,
+      canvasAnimating: false,
       themeSettings: defaultThemeSettings,
       undoStack: [],
       redoStack: [],
@@ -390,6 +400,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, widget.id],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -481,6 +492,29 @@ export const useStore = create<StoreState>()(
         })
       },
 
+      deleteWidgetAnimated: (sheetId, widgetId) => {
+        const { exitingWidgetIds } = get()
+        if (exitingWidgetIds.includes(widgetId)) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, widgetId] })
+        setTimeout(() => {
+          get().deleteWidget(sheetId, widgetId)
+          set((s) => ({ exitingWidgetIds: s.exitingWidgetIds.filter((x) => x !== widgetId) }))
+        }, 160)
+      },
+
+      deleteWidgetsAnimated: (sheetId, widgetIds) => {
+        const { exitingWidgetIds } = get()
+        const newIds = widgetIds.filter((id) => !exitingWidgetIds.includes(id))
+        if (newIds.length === 0) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, ...newIds] })
+        setTimeout(() => {
+          get().deleteWidgets(sheetId, newIds)
+          set((s) => ({
+            exitingWidgetIds: s.exitingWidgetIds.filter((x) => !newIds.includes(x)),
+          }))
+        }, 160)
+      },
+
       moveWidget: (id, x, y) => {
         set((state) => {
           const widget = state.widgets[id]
@@ -543,6 +577,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -579,6 +614,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, duplicate.id],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -641,6 +677,12 @@ export const useStore = create<StoreState>()(
         set({ selectedWidgetIds: [] })
       },
 
+      clearEnteringWidget: (id) => {
+        set((state) => ({
+          enteringWidgetIds: state.enteringWidgetIds.filter((x) => x !== id),
+        }))
+      },
+
       setCanvasState: (newState) => {
         set((prev) => ({
           canvasState: { ...prev.canvasState, ...newState },
@@ -649,6 +691,10 @@ export const useStore = create<StoreState>()(
 
       resetCanvasView: () => {
         set({ canvasState: defaultCanvasState })
+      },
+
+      setCanvasAnimating: (v) => {
+        set({ canvasAnimating: v })
       },
 
       setThemeSettings: (settings) => {
@@ -722,6 +768,7 @@ export const useStore = create<StoreState>()(
                 : s
             ),
             selectedWidgetIds: newIds,
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }

@@ -31,7 +31,7 @@ export function useKeyboardShortcuts(containerRef: React.RefObject<HTMLDivElemen
         const s = useStore.getState()
         if (s.selectedWidgetIds.length > 0 && s.currentSheetId) {
           e.preventDefault()
-          s.deleteWidgets(s.currentSheetId, s.selectedWidgetIds)
+          s.deleteWidgetsAnimated(s.currentSheetId, s.selectedWidgetIds)
         }
         return
       }

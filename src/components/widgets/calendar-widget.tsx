@@ -156,7 +156,7 @@ export const CalendarWidget = memo(function CalendarWidget({ widgetId }: { widge
             />
             <button
               onClick={handleSaveNote}
-              className="h-6 shrink-0 rounded bg-primary px-2 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="h-6 shrink-0 rounded bg-primary px-2 text-[10px] font-medium text-primary-foreground hover:bg-primary/90 transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.97]"
             >
               Save
             </button>

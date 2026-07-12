@@ -79,7 +79,7 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
       {open && (
         <div
           ref={menuRef}
-          className="absolute bottom-full right-0 mb-2 rounded-lg border bg-popover text-popover-foreground shadow-md p-1 min-w-40"
+          className="absolute bottom-full right-0 mb-2 rounded-lg border bg-popover text-popover-foreground shadow-md p-1 min-w-40 menu-enter origin-bottom-right"
           onPointerDown={stopPropagation}
         >
           {WIDGET_OPTIONS.map((option) => {
