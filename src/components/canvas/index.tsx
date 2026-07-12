@@ -5,6 +5,8 @@ import { useStore } from "@/store"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ZoomControls } from "./zoom-controls"
 import { CanvasWidget } from "./canvas-widget"
+import { MarqueeOverlay } from "./marquee-overlay"
+import { SnapGuides } from "./snap-guides"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
 import { LayoutTemplate } from "lucide-react"
@@ -65,7 +67,10 @@ export function Canvas() {
         {widgetOrder?.map((id) => (
           <CanvasWidget key={id} widgetId={id} />
         ))}
+        <MarqueeOverlay />
       </div>
+
+      <SnapGuides />
 
       {widgetOrder?.length === 0 && currentSheetId && (
         <EmptyState
