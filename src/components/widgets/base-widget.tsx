@@ -54,20 +54,38 @@ export const BaseWidget = memo(function BaseWidget({
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button === 0) {
-        if (e.shiftKey) {
+        if (e.shiftKey || e.metaKey || e.ctrlKey) {
           if (isSelected) {
             removeFromSelection(widgetId)
           } else {
             addToSelection(widgetId)
           }
+        } else if (isSelected) {
+          pendingCollapse.current = { x: e.clientX, y: e.clientY }
         } else {
           selectWidget(widgetId)
         }
+        e.stopPropagation()
       }
-      e.stopPropagation()
+      // Middle-button (pan) is left to bubble to the canvas gesture handler,
+      // which starts a pan from anywhere, including over widgets.
     },
     [selectWidget, addToSelection, removeFromSelection, widgetId, isSelected]
   )
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    const pending = pendingCollapse.current
+    pendingCollapse.current = null
+    if (!pending) return
+    const dist = Math.hypot(e.clientX - pending.x, e.clientY - pending.y)
+    if (dist < 4) {
+      selectWidget(widgetId)
+    }
+  }, [selectWidget, widgetId])
+
+  const handlePointerCancel = useCallback(() => {
+    pendingCollapse.current = null
+  }, [])
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -117,6 +135,8 @@ export const BaseWidget = memo(function BaseWidget({
           ...themeVars,
         } as React.CSSProperties}
         onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerCancel}
         onContextMenu={handleContextMenu}
         onAnimationEnd={(e) => {
           if (e.animationName === "widget-enter") {

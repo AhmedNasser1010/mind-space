@@ -159,6 +159,16 @@ describe("copyWidgets / pasteWidgets", () => {
   })
 })
 
+describe("setSelection", () => {
+  it("replaces selectedWidgetIds and does not push an undo entry", () => {
+    useStore.setState({ selectedWidgetIds: ["w1"] })
+    useStore.getState().setSelection(["a", "b"])
+    const state = useStore.getState()
+    expect(state.selectedWidgetIds).toEqual(["a", "b"])
+    expect(state.undoStack).toHaveLength(0)
+  })
+})
+
 describe("deleteWidgets", () => {
   it("removes from widgets, widgetOrder, and selectedWidgetIds", () => {
     useStore.setState({ selectedWidgetIds: ["w1"] })
