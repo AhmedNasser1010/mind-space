@@ -1,32 +1,13 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings } from "@/types"
+import { diffForHistory, applyHistoryEntry, isValidHistoryEntry, type HistoryEntry, type HistoryTrio } from "@/lib/history-diff"
 import type { BackupFile } from "@/lib/backup"
-import type { HistoryTrio } from "@/lib/history-diff"
-import { diffForHistory, applyHistoryEntry, isValidHistoryEntry, type HistoryEntry } from "@/lib/history-diff"
 
 interface ClipboardData {
   widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
   minX: number
   minY: number
-}
-
-interface Snapshot {
-  sheets: Sheet[]
-  widgets: Record<string, Widget>
-  currentSheetId: string | null
-}
-
-export const PERSIST_VERSION = 1
-
-export function migrate(persisted: unknown, version: number) {
-  const state = persisted as Record<string, unknown>
-  if (version < 1) {
-    // v0 blobs carried full undo/redo history; strip it.
-    delete state.undoStack
-    delete state.redoStack
-  }
-  return state
 }
 
 interface StoreState {
@@ -53,6 +34,7 @@ interface StoreState {
 
   addWidget: (sheetId: string, widget: Widget) => void
   updateWidget: (id: string, updates: Partial<Widget>) => void
+  updateWidgets: (ids: string[], updates: Partial<Widget>) => void
   updateWidgetSilent: (id: string, updates: Partial<Widget>) => void
   recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
@@ -110,6 +92,8 @@ let pendingSnapshot: HistoryTrio | null = null
 export function __resetPendingSnapshotForTests() {
   pendingSnapshot = null
 }
+
+export const PERSIST_VERSION = 4
 
 export function migratePersistedState(persisted: unknown, version: number): unknown {
   const state = persisted as Record<string, unknown>
@@ -526,6 +510,22 @@ export const useStore = create<StoreState>()(
           const widgets = {
             ...state.widgets,
             [id]: { ...widget, ...updates },
+          }
+          return {
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
+          }
+        })
+      },
+
+      updateWidgets: (ids, updates) => {
+        set((state) => {
+          const prevTrio = trioOf(state)
+          const widgets = { ...state.widgets }
+          for (const id of ids) {
+            const widget = widgets[id]
+            if (!widget) continue
+            widgets[id] = { ...widget, ...updates }
           }
           return {
             widgets,
@@ -973,7 +973,10 @@ export const useStore = create<StoreState>()(
           let currentSheetId = backup.currentSheetId
 
           if (backup.version < PERSIST_VERSION) {
-            const migrated = migrate({ sheets, widgets, currentSheetId }, backup.version) as {
+            const migrated = migratePersistedState(
+              { sheets, widgets, currentSheetId },
+              backup.version
+            ) as {
               sheets: Sheet[]
               widgets: Record<string, Widget>
               currentSheetId: string | null
@@ -987,12 +990,11 @@ export const useStore = create<StoreState>()(
             ? currentSheetId
             : sheets[0]?.id ?? null
 
+          const next = { sheets, widgets, currentSheetId: resolvedCurrentSheetId }
           return {
-            sheets,
-            widgets,
-            currentSheetId: resolvedCurrentSheetId,
+            ...next,
             selectedWidgetIds: [],
-            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: resolvedCurrentSheetId }),
+            ...pushHistoryEntry(state, prevTrio, next),
           }
         })
       },
@@ -1036,7 +1038,7 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: 4,
+      version: PERSIST_VERSION,
       migrate: migratePersistedState,
       partialize: (state) => ({
         sheets: state.sheets,

@@ -68,9 +68,8 @@ export function Canvas() {
           <CanvasWidget key={id} widgetId={id} />
         ))}
         <MarqueeOverlay />
+        <SnapGuides />
       </div>
-
-      <SnapGuides />
 
       {widgetOrder?.length === 0 && currentSheetId && (
         <EmptyState

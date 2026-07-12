@@ -89,6 +89,44 @@ describe("updateWidget", () => {
   })
 })
 
+describe("updateWidgets", () => {
+  it("applies the same update to all ids in one undo entry", () => {
+    useStore.setState({
+      widgets: {
+        w1: makeWidget("w1", { colorTheme: undefined }),
+        w2: makeWidget("w2", { colorTheme: undefined }),
+        w3: makeWidget("w3", { colorTheme: undefined }),
+      },
+    })
+    useStore.getState().updateWidgets(["w1", "w2", "w3"], { colorTheme: "blue" })
+    const state = useStore.getState()
+    expect(state.widgets.w1.colorTheme).toBe("blue")
+    expect(state.widgets.w2.colorTheme).toBe("blue")
+    expect(state.widgets.w3.colorTheme).toBe("blue")
+    expect(state.undoStack).toHaveLength(1)
+  })
+
+  it("undo restores every widget's previous colorTheme", () => {
+    useStore.setState({
+      widgets: {
+        w1: makeWidget("w1", { colorTheme: "red" }),
+        w2: makeWidget("w2", { colorTheme: undefined }),
+      },
+    })
+    useStore.getState().updateWidgets(["w1", "w2"], { colorTheme: "blue" })
+    useStore.getState().undo()
+    const state = useStore.getState()
+    expect(state.widgets.w1.colorTheme).toBe("red")
+    expect(state.widgets.w2.colorTheme).toBeUndefined()
+  })
+
+  it("skips unknown ids", () => {
+    useStore.getState().updateWidgets(["does-not-exist"], { colorTheme: "blue" })
+    const state = useStore.getState()
+    expect(state.widgets["does-not-exist"]).toBeUndefined()
+  })
+})
+
 describe("moveWidget", () => {
   it("changes x/y and does not push an undo snapshot", () => {
     useStore.getState().moveWidget("w1", 10, 20)

@@ -22,11 +22,6 @@ export const BaseWidget = memo(function BaseWidget({
   children,
   hideTitle = false,
 }: BaseWidgetProps) {
-  const [ctxMenu, setCtxMenu] = useState<{
-    open: boolean
-    x: number
-    y: number
-  }>({ open: false, x: 0, y: 0 })
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -34,9 +29,11 @@ export const BaseWidget = memo(function BaseWidget({
   const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
   const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
   const [collapseAnim, setCollapseAnim] = useState(false)
+  const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
+  const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
 
   const widget = useStore((s) => s.widgets[widgetId])
-  const selectedWidgetIds = useStore((s) => s.selectedWidgetIds)
+  const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
   const isEntering = useStore((s) => s.enteringWidgetIds.includes(widgetId))
   const isExiting = useStore((s) => s.exitingWidgetIds.includes(widgetId))
   const selectWidget = useStore((s) => s.selectWidget)
@@ -102,12 +99,6 @@ export const BaseWidget = memo(function BaseWidget({
     pendingDeselect.current = null
   }, [])
 
-  const handleContextMenu = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setCtxMenu({ open: true, x: e.clientX, y: e.clientY })
-  }, [])
-
   const handleStartRename = useCallback(() => {
     if (!widget) return
     setRenameValue(widget.title)
@@ -128,7 +119,7 @@ export const BaseWidget = memo(function BaseWidget({
   if (!widget) return null
 
   return (
-    <>
+    <WidgetContextMenu widgetId={widgetId} onStartRename={handleStartRename}>
       <div
         className={cn(
           "absolute rounded-xl border bg-card text-card-foreground shadow-sm select-none group flex flex-col",
@@ -152,7 +143,6 @@ export const BaseWidget = memo(function BaseWidget({
         onPointerDown={handlePointerDown}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        onContextMenu={handleContextMenu}
         onAnimationEnd={(e) => {
           if (e.animationName === "widget-enter") {
             useStore.getState().clearEnteringWidget(widgetId)
@@ -202,15 +192,6 @@ export const BaseWidget = memo(function BaseWidget({
           </div>
         )}
       </div>
-
-      <WidgetContextMenu
-        widgetId={widgetId}
-        open={ctxMenu.open}
-        x={ctxMenu.x}
-        y={ctxMenu.y}
-        onClose={() => setCtxMenu((prev) => ({ ...prev, open: false }))}
-        onStartRename={handleStartRename}
-      />
-    </>
+    </WidgetContextMenu>
   )
 })
