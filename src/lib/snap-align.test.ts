@@ -85,4 +85,26 @@ describe("computeSnap", () => {
     const result = computeSnap(moving, [], SNAP_THRESHOLD_PX)
     expect(result).toEqual({ dx: 0, dy: 0, snappedX: false, snappedY: false, guides: [] })
   })
+
+  it("lockedAxis 'x' skips the x comparison but still snaps y", () => {
+    const moving = rect(104, 203)
+    const candidates = [rect(100, 200, 50, 50)]
+    const result = computeSnap(moving, candidates, SNAP_THRESHOLD_PX, "x")
+    expect(result.snappedX).toBe(false)
+    expect(result.dx).toBe(0)
+    expect(result.snappedY).toBe(true)
+    expect(result.dy).toBe(-3)
+    expect(result.guides.every((g) => g.axis === "y")).toBe(true)
+  })
+
+  it("lockedAxis 'y' skips the y comparison but still snaps x", () => {
+    const moving = rect(104, 203)
+    const candidates = [rect(100, 200, 50, 50)]
+    const result = computeSnap(moving, candidates, SNAP_THRESHOLD_PX, "y")
+    expect(result.snappedY).toBe(false)
+    expect(result.dy).toBe(0)
+    expect(result.snappedX).toBe(true)
+    expect(result.dx).toBe(-4)
+    expect(result.guides.every((g) => g.axis === "x")).toBe(true)
+  })
 })
