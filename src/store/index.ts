@@ -37,8 +37,8 @@ interface StoreState {
   canvasState: CanvasState
   canvasAnimating: boolean
   themeSettings: ThemeSettings
-  undoStack: string[]
-  redoStack: string[]
+  undoStack: HistoryEntry[]
+  redoStack: HistoryEntry[]
   clipboard: ClipboardData | null
 
   addSheet: (title: string, description?: string) => void
@@ -87,8 +87,45 @@ interface StoreState {
 
 const MAX_HISTORY = 50
 
-function takeSnapshot(sheets: Sheet[], widgets: Record<string, Widget>, currentSheetId: string | null): string {
-  return JSON.stringify({ sheets, widgets, currentSheetId })
+function trioOf(state: { sheets: Sheet[]; widgets: Record<string, Widget>; currentSheetId: string | null }): HistoryTrio {
+  return { sheets: state.sheets, widgets: state.widgets, currentSheetId: state.currentSheetId }
+}
+
+// Pending pre-interaction trio captured by recordSnapshot(). Materialized
+// into a HistoryEntry (and pushed to undoStack) by the first subsequent
+// mutation. Module-level: recordSnapshot's public signature must stay
+// `() => void` (drag/resize hooks call it as-is), so the two-phase state
+// lives outside the store slice rather than as an extra arg.
+let pendingSnapshot: HistoryTrio | null = null
+
+// Test-only escape hatch: pendingSnapshot lives outside the store slice, so
+// resetting store state between tests (useStore.setState(...)) does not
+// clear it. Call this from beforeEach if a test suite exercises
+// recordSnapshot() to avoid leaking a pending snapshot into the next test.
+export function __resetPendingSnapshotForTests() {
+  pendingSnapshot = null
+}
+
+/**
+ * Diffs `prevTrio` (the pending snapshot if one is open, else the trio
+ * right before this action) against `nextTrio` and returns the undo/redo
+ * stack fields for the action's `set(...)` partial. Every snapshotting
+ * action goes through this so a pending snapshot from recordSnapshot()
+ * is never silently dropped if something other than moveWidget/
+ * resizeWidget runs next.
+ */
+function pushHistoryEntry(
+  state: { undoStack: HistoryEntry[] },
+  prevTrio: HistoryTrio,
+  nextTrio: HistoryTrio
+): { undoStack: HistoryEntry[]; redoStack: HistoryEntry[] } {
+  const basisTrio = pendingSnapshot ?? prevTrio
+  pendingSnapshot = null
+  const entry = diffForHistory(basisTrio, nextTrio)
+  if (!entry) {
+    return { undoStack: state.undoStack, redoStack: [] }
+  }
+  return { undoStack: [...state.undoStack, entry].slice(-MAX_HISTORY), redoStack: [] }
 }
 
 const defaultCanvasState: CanvasState = {
@@ -251,7 +288,7 @@ export const useStore = create<StoreState>()(
 
       addSheet: (title, description) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const now = Date.now()
           const sheet: Sheet = {
             id: crypto.randomUUID(),
@@ -261,11 +298,12 @@ export const useStore = create<StoreState>()(
             createdAt: now,
             updatedAt: now,
           }
+          const sheets = [...state.sheets, sheet]
+          const currentSheetId = state.currentSheetId ?? sheet.id
           return {
-            sheets: [...state.sheets, sheet],
-            currentSheetId: state.currentSheetId ?? sheet.id,
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            sheets,
+            currentSheetId,
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets: state.widgets, currentSheetId }),
           }
         })
       },
@@ -274,23 +312,23 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const sheet = state.sheets.find((s) => s.id === id)
           if (!sheet) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const remainingWidgets = { ...state.widgets }
           for (const widgetId of sheet.widgetOrder) {
             delete remainingWidgets[widgetId]
           }
           const updatedSheets = state.sheets.filter((s) => s.id !== id)
+          const currentSheetId =
+            state.currentSheetId === id
+              ? updatedSheets[0]?.id ?? null
+              : state.currentSheetId
           return {
             sheets: updatedSheets,
             widgets: remainingWidgets,
-            currentSheetId:
-              state.currentSheetId === id
-                ? updatedSheets[0]?.id ?? null
-                : state.currentSheetId,
+            currentSheetId,
             selectedWidgetIds:
               state.currentSheetId === id ? [] : state.selectedWidgetIds,
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets: updatedSheets, widgets: remainingWidgets, currentSheetId }),
           }
         })
       },
@@ -301,13 +339,13 @@ export const useStore = create<StoreState>()(
 
       updateSheet: (id, updates) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const sheets = state.sheets.map((s) =>
+            s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s
+          )
           return {
-            sheets: state.sheets.map((s) =>
-              s.id === id ? { ...s, ...updates, updatedAt: Date.now() } : s
-            ),
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            sheets,
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets: state.widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -316,7 +354,7 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const original = state.sheets.find((s) => s.id === id)
           if (!original) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const now = Date.now()
           const newId = crypto.randomUUID()
           const widgetIdMap = new Map<string, string>()
@@ -344,13 +382,14 @@ export const useStore = create<StoreState>()(
             createdAt: now,
             updatedAt: now,
           }
+          const sheets = [...state.sheets, newSheet]
+          const widgets = { ...state.widgets, ...newWidgets }
           return {
-            sheets: [...state.sheets, newSheet],
-            widgets: { ...state.widgets, ...newWidgets },
+            sheets,
+            widgets,
             currentSheetId: newId,
             selectedWidgetIds: [],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: newId }),
           }
         })
       },
@@ -363,7 +402,7 @@ export const useStore = create<StoreState>()(
           const targetIndex = state.sheets.findIndex((s) => s.id === targetSheetId)
           if (fromIndex < 0 || targetIndex < 0) return state
 
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const nextSheets = [...state.sheets]
           const [moved] = nextSheets.splice(fromIndex, 1)
           const adjustedTargetIndex =
@@ -382,28 +421,37 @@ export const useStore = create<StoreState>()(
 
           return {
             sheets: nextSheets,
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets: nextSheets, widgets: state.widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
 
       reorderSheetWidgets: (sheetId, widgetOrder) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
+          )
           return {
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
-            ),
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            sheets,
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets: state.widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
 
       addWidget: (sheetId, widget) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const widgets = { ...state.widgets, [widget.id]: widget }
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: [...s.widgetOrder, widget.id],
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
             widgets: { ...state.widgets, [widget.id]: widget },
             sheets: state.sheets.map((s) =>
@@ -426,14 +474,14 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const widgets = {
+            ...state.widgets,
+            [id]: { ...widget, ...updates },
+          }
           return {
-            widgets: {
-              ...state.widgets,
-              [id]: { ...widget, ...updates },
-            },
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -447,62 +495,64 @@ export const useStore = create<StoreState>()(
       },
 
       recordSnapshot: () => {
-        set((state) => ({
-          undoStack: [...state.undoStack, takeSnapshot(state.sheets, state.widgets, state.currentSheetId)].slice(-MAX_HISTORY),
-          redoStack: [],
-        }))
+        // Two-phase: capture the pre-interaction trio by reference (safe,
+        // store updates are immutable spreads) but don't push anything yet.
+        // The first mutation that runs a snapshotting action (moveWidget/
+        // resizeWidget for drag/resize, or pushHistoryEntry's fallback for
+        // any other action) diffs against this and materializes the entry.
+        pendingSnapshot = trioOf(get())
       },
 
       deleteWidgets: (sheetId, widgetIds) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const remainingWidgets = { ...state.widgets }
           for (const id of widgetIds) {
             delete remainingWidgets[id]
           }
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: s.widgetOrder.filter(
+                    (id) => !widgetIds.includes(id)
+                  ),
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
             widgets: remainingWidgets,
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: s.widgetOrder.filter(
-                      (id) => !widgetIds.includes(id)
-                    ),
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            sheets,
             selectedWidgetIds: state.selectedWidgetIds.filter(
               (id) => !widgetIds.includes(id)
             ),
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets: remainingWidgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
 
       deleteWidget: (sheetId, widgetId) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const remainingWidgets = { ...state.widgets }
           delete remainingWidgets[widgetId]
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: s.widgetOrder.filter((id) => id !== widgetId),
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
             widgets: remainingWidgets,
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: s.widgetOrder.filter((id) => id !== widgetId),
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            sheets,
             selectedWidgetIds: state.selectedWidgetIds.filter(
               (id) => id !== widgetId
             ),
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets: remainingWidgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -534,11 +584,16 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
+          const widgets = {
+            ...state.widgets,
+            [id]: { ...widget, x, y },
+          }
+          if (!pendingSnapshot) {
+            return { widgets }
+          }
           return {
-            widgets: {
-              ...state.widgets,
-              [id]: { ...widget, x, y },
-            },
+            widgets,
+            ...pushHistoryEntry(state, trioOf(state), { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -547,11 +602,16 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
+          const widgets = {
+            ...state.widgets,
+            [id]: { ...widget, width, height },
+          }
+          if (!pendingSnapshot) {
+            return { widgets }
+          }
           return {
-            widgets: {
-              ...state.widgets,
-              [id]: { ...widget, width, height },
-            },
+            widgets,
+            ...pushHistoryEntry(state, trioOf(state), { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -560,7 +620,7 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const sheet = state.sheets.find((s) => s.id === sheetId)
           if (!sheet) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const maxZ = Math.max(
             ...Object.values(state.widgets).map((w) => w.zIndex),
             0
@@ -581,6 +641,16 @@ export const useStore = create<StoreState>()(
             newWidgets[duplicate.id] = duplicate
             newIds.push(duplicate.id)
           })
+          const widgets = { ...state.widgets, ...newWidgets }
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: [...s.widgetOrder, ...newIds],
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
             widgets: { ...state.widgets, ...newWidgets },
             sheets: state.sheets.map((s) =>
@@ -605,7 +675,7 @@ export const useStore = create<StoreState>()(
           if (!original) return state
           const sheet = state.sheets.find((s) => s.id === sheetId)
           if (!sheet) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const maxZ = Math.max(
             ...Object.values(state.widgets).map((w) => w.zIndex),
             0
@@ -618,6 +688,16 @@ export const useStore = create<StoreState>()(
             zIndex: maxZ + 1,
             title: `${original.title} (copy)`,
           }
+          const widgets = { ...state.widgets, [duplicate.id]: duplicate }
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: [...s.widgetOrder, duplicate.id],
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
             widgets: { ...state.widgets, [duplicate.id]: duplicate },
             sheets: state.sheets.map((s) =>
@@ -640,14 +720,14 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const widgets = {
+            ...state.widgets,
+            [id]: { ...widget, collapsed: !widget.collapsed },
+          }
           return {
-            widgets: {
-              ...state.widgets,
-              [id]: { ...widget, collapsed: !widget.collapsed },
-            },
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -656,14 +736,14 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
+          const widgets = {
+            ...state.widgets,
+            [id]: { ...widget, title },
+          }
           return {
-            widgets: {
-              ...state.widgets,
-              [id]: { ...widget, title },
-            },
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -747,7 +827,7 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const sheet = state.sheets.find((s) => s.id === sheetId)
           if (!sheet || !state.clipboard) return state
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
           const maxZ = Math.max(
             ...Object.values(state.widgets).map((w) => w.zIndex),
             0
@@ -771,17 +851,19 @@ export const useStore = create<StoreState>()(
             }
             newIds.push(id)
           })
+          const widgets = { ...state.widgets, ...newWidgets }
+          const sheets = state.sheets.map((s) =>
+            s.id === sheetId
+              ? {
+                  ...s,
+                  widgetOrder: [...s.widgetOrder, ...newIds],
+                  updatedAt: Date.now(),
+                }
+              : s
+          )
           return {
-            widgets: { ...state.widgets, ...newWidgets },
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: [...s.widgetOrder, ...newIds],
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            widgets,
+            sheets,
             selectedWidgetIds: newIds,
             enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
@@ -825,38 +907,36 @@ export const useStore = create<StoreState>()(
       },
 
       undo: () => {
+        pendingSnapshot = null
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (undoStack.length === 0) return
-        let previous: Snapshot
-        try {
-          previous = JSON.parse(undoStack[undoStack.length - 1])
-        } catch {
+        const entry = undoStack[undoStack.length - 1]
+        if (!isValidHistoryEntry(entry)) {
           set({ undoStack: undoStack.slice(0, -1) })
           return
         }
-        const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
+        const { restored, mirror } = applyHistoryEntry({ sheets, widgets, currentSheetId }, entry)
         set({
-          ...previous,
+          ...restored,
           undoStack: undoStack.slice(0, -1),
-          redoStack: [...redoStack, currentSnapshot].slice(-MAX_HISTORY),
+          redoStack: [...redoStack, mirror].slice(-MAX_HISTORY),
           selectedWidgetIds: [],
         })
       },
 
       redo: () => {
+        pendingSnapshot = null
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (redoStack.length === 0) return
-        let next: Snapshot
-        try {
-          next = JSON.parse(redoStack[redoStack.length - 1])
-        } catch {
+        const entry = redoStack[redoStack.length - 1]
+        if (!isValidHistoryEntry(entry)) {
           set({ redoStack: redoStack.slice(0, -1) })
           return
         }
-        const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
+        const { restored, mirror } = applyHistoryEntry({ sheets, widgets, currentSheetId }, entry)
         set({
-          ...next,
-          undoStack: [...undoStack, currentSnapshot].slice(-MAX_HISTORY),
+          ...restored,
+          undoStack: [...undoStack, mirror].slice(-MAX_HISTORY),
           redoStack: redoStack.slice(0, -1),
           selectedWidgetIds: [],
         })
@@ -865,7 +945,7 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: 2,
+      version: 3,
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
         if (version < 1) {
@@ -898,6 +978,14 @@ export const useStore = create<StoreState>()(
             }
           }
         }
+        if (version < 3) {
+          // v2 (and any earlier) blobs never persisted undo/redo stacks, or
+          // persisted them as full-state JSON-string snapshots (pre-v1).
+          // Neither shape is a valid HistoryEntry[]; drop them and start
+          // fresh rather than risk feeding undo/redo malformed entries.
+          delete state.undoStack
+          delete state.redoStack
+        }
         return state
       },
       partialize: (state) => ({
@@ -907,6 +995,8 @@ export const useStore = create<StoreState>()(
         canvasState: state.canvasState,
         themeSettings: state.themeSettings,
         clipboard: state.clipboard,
+        undoStack: state.undoStack,
+        redoStack: state.redoStack,
       }),
       onRehydrateStorage: () => {
         return (state, error) => {
