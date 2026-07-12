@@ -17,6 +17,7 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
 
   const addWidget = useStore((s) => s.addWidget)
   const currentSheetId = useStore((s) => s.currentSheetId)
+  const canvasState = useStore((s) => s.canvasState)
 
   const handleAddWidget = useCallback(
     (type: WidgetType) => {
@@ -24,12 +25,20 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
       const def = WIDGET_DEFS[type]
       if (!def) return
       const id = crypto.randomUUID()
+
+      const container = document.querySelector<HTMLElement>('[data-container="canvas"]')
+      const rect = container?.getBoundingClientRect()
+      const cx = (rect?.width ?? window.innerWidth) / 2
+      const cy = (rect?.height ?? window.innerHeight) / 2
+      const centerX = (cx - canvasState.offsetX) / canvasState.scale
+      const centerY = (cy - canvasState.offsetY) / canvasState.scale
+
       addWidget(currentSheetId, {
         id,
         type,
         title: def.defaultTitle,
-        x: 100 + Math.random() * 100,
-        y: 100 + Math.random() * 100,
+        x: centerX - def.defaultSize.width / 2,
+        y: centerY - def.defaultSize.height / 2,
         width: def.defaultSize.width,
         height: def.defaultSize.height,
         zIndex: Date.now(),
@@ -38,7 +47,7 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
       })
       setOpen(false)
     },
-    [addWidget, currentSheetId]
+    [addWidget, currentSheetId, canvasState]
   )
 
   useEffect(() => {

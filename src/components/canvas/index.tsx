@@ -47,6 +47,7 @@ export function Canvas() {
     <div
       ref={containerRef}
       className="h-full overflow-hidden relative bg-background"
+      data-container="canvas"
       style={{ touchAction: "none" }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
