@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings } from "@/types"
-import { diffForHistory, applyHistoryEntry, isValidHistoryEntry, type HistoryEntry, type HistoryTrio } from "@/lib/history-diff"
+import type { BackupFile } from "@/lib/backup"
 
 interface ClipboardData {
   widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
@@ -9,12 +9,33 @@ interface ClipboardData {
   minY: number
 }
 
+interface Snapshot {
+  sheets: Sheet[]
+  widgets: Record<string, Widget>
+  currentSheetId: string | null
+}
+
+export const PERSIST_VERSION = 1
+
+export function migrate(persisted: unknown, version: number) {
+  const state = persisted as Record<string, unknown>
+  if (version < 1) {
+    // v0 blobs carried full undo/redo history; strip it.
+    delete state.undoStack
+    delete state.redoStack
+  }
+  return state
+}
+
 interface StoreState {
   sheets: Sheet[]
   currentSheetId: string | null
   widgets: Record<string, Widget>
   selectedWidgetIds: string[]
+  enteringWidgetIds: string[]
+  exitingWidgetIds: string[]
   canvasState: CanvasState
+  canvasAnimating: boolean
   themeSettings: ThemeSettings
   undoStack: HistoryEntry[]
   redoStack: HistoryEntry[]
@@ -34,6 +55,8 @@ interface StoreState {
   recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
+  deleteWidgetAnimated: (sheetId: string, widgetId: string) => void
+  deleteWidgetsAnimated: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
@@ -45,15 +68,18 @@ interface StoreState {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   deselectAll: () => void
-  setSelection: (ids: string[]) => void
+  clearEnteringWidget: (id: string) => void
 
   setCanvasState: (state: Partial<CanvasState>) => void
   resetCanvasView: () => void
+  setCanvasAnimating: (v: boolean) => void
 
   setThemeSettings: (settings: Partial<ThemeSettings>) => void
 
   copyWidgets: (sheetId: string, widgetIds: string[]) => void
   pasteWidgets: (sheetId: string) => void
+
+  importState: (backup: BackupFile) => void
 
   undo: () => void
   redo: () => void
@@ -251,7 +277,10 @@ export const useStore = create<StoreState>()(
       currentSheetId: null,
       widgets: {},
       selectedWidgetIds: [],
+      enteringWidgetIds: [],
+      exitingWidgetIds: [],
       canvasState: defaultCanvasState,
+      canvasAnimating: false,
       themeSettings: defaultThemeSettings,
       undoStack: [],
       redoStack: [],
@@ -424,9 +453,19 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets,
-            sheets,
-            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
+            widgets: { ...state.widgets, [widget.id]: widget },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, widget.id],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            enteringWidgetIds: [...state.enteringWidgetIds, widget.id],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
           }
         })
       },
@@ -518,6 +557,29 @@ export const useStore = create<StoreState>()(
         })
       },
 
+      deleteWidgetAnimated: (sheetId, widgetId) => {
+        const { exitingWidgetIds } = get()
+        if (exitingWidgetIds.includes(widgetId)) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, widgetId] })
+        setTimeout(() => {
+          get().deleteWidget(sheetId, widgetId)
+          set((s) => ({ exitingWidgetIds: s.exitingWidgetIds.filter((x) => x !== widgetId) }))
+        }, 160)
+      },
+
+      deleteWidgetsAnimated: (sheetId, widgetIds) => {
+        const { exitingWidgetIds } = get()
+        const newIds = widgetIds.filter((id) => !exitingWidgetIds.includes(id))
+        if (newIds.length === 0) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, ...newIds] })
+        setTimeout(() => {
+          get().deleteWidgets(sheetId, newIds)
+          set((s) => ({
+            exitingWidgetIds: s.exitingWidgetIds.filter((x) => !newIds.includes(x)),
+          }))
+        }, 160)
+      },
+
       moveWidget: (id, x, y) => {
         set((state) => {
           const widget = state.widgets[id]
@@ -590,9 +652,19 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets,
-            sheets,
-            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
+            widgets: { ...state.widgets, ...newWidgets },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, ...newIds],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
           }
         })
       },
@@ -627,9 +699,19 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets,
-            sheets,
-            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
+            widgets: { ...state.widgets, [duplicate.id]: duplicate },
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId
+                ? {
+                    ...s,
+                    widgetOrder: [...s.widgetOrder, duplicate.id],
+                    updatedAt: Date.now(),
+                  }
+                : s
+            ),
+            enteringWidgetIds: [...state.enteringWidgetIds, duplicate.id],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
           }
         })
       },
@@ -690,8 +772,10 @@ export const useStore = create<StoreState>()(
         set({ selectedWidgetIds: [] })
       },
 
-      setSelection: (ids) => {
-        set({ selectedWidgetIds: ids })
+      clearEnteringWidget: (id) => {
+        set((state) => ({
+          enteringWidgetIds: state.enteringWidgetIds.filter((x) => x !== id),
+        }))
       },
 
       setCanvasState: (newState) => {
@@ -702,6 +786,10 @@ export const useStore = create<StoreState>()(
 
       resetCanvasView: () => {
         set({ canvasState: defaultCanvasState })
+      },
+
+      setCanvasAnimating: (v) => {
+        set({ canvasAnimating: v })
       },
 
       setThemeSettings: (settings) => {
@@ -777,7 +865,43 @@ export const useStore = create<StoreState>()(
             widgets,
             sheets,
             selectedWidgetIds: newIds,
-            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
+      },
+
+      importState: (backup) => {
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+
+          let sheets = backup.sheets
+          let widgets = backup.widgets
+          let currentSheetId = backup.currentSheetId
+
+          if (backup.version < PERSIST_VERSION) {
+            const migrated = migrate({ sheets, widgets, currentSheetId }, backup.version) as {
+              sheets: Sheet[]
+              widgets: Record<string, Widget>
+              currentSheetId: string | null
+            }
+            sheets = migrated.sheets
+            widgets = migrated.widgets
+            currentSheetId = migrated.currentSheetId
+          }
+
+          const resolvedCurrentSheetId = sheets.some((s) => s.id === currentSheetId)
+            ? currentSheetId
+            : sheets[0]?.id ?? null
+
+          return {
+            sheets,
+            widgets,
+            currentSheetId: resolvedCurrentSheetId,
+            selectedWidgetIds: [],
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
           }
         })
       },

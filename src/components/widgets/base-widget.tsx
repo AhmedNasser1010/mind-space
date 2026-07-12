@@ -30,10 +30,13 @@ export const BaseWidget = memo(function BaseWidget({
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
   const renameInputRef = useRef<HTMLInputElement>(null)
-  const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
+  const headerRef = useRef<HTMLDivElement>(null)
+  const [collapseAnim, setCollapseAnim] = useState(false)
 
   const widget = useStore((s) => s.widgets[widgetId])
-  const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
+  const selectedWidgetIds = useStore((s) => s.selectedWidgetIds)
+  const isEntering = useStore((s) => s.enteringWidgetIds.includes(widgetId))
+  const isExiting = useStore((s) => s.exitingWidgetIds.includes(widgetId))
   const selectWidget = useStore((s) => s.selectWidget)
   const addToSelection = useStore((s) => s.addToSelection)
   const removeFromSelection = useStore((s) => s.removeFromSelection)
@@ -113,14 +116,21 @@ export const BaseWidget = memo(function BaseWidget({
     <>
       <div
         className={cn(
-          "absolute rounded-xl border bg-card text-card-foreground shadow-sm select-none group flex flex-col widget-enter",
-          isSelected && "shadow-md"
+          "absolute rounded-xl border bg-card text-card-foreground shadow-sm select-none group flex flex-col",
+          isSelected && "shadow-md",
+          isEntering && "widget-enter",
+          isExiting && "widget-exit",
+          collapseAnim && "widget-collapse-anim overflow-hidden"
         )}
         style={{
           left: widget.x,
           top: widget.y,
           width: widget.width,
-          height: widget.collapsed ? undefined : widget.height,
+          height: widget.collapsed
+            ? headerRef.current
+              ? headerRef.current.offsetHeight + 2
+              : undefined
+            : widget.height,
           zIndex: widget.zIndex,
           ...themeVars,
         } as React.CSSProperties}
@@ -128,10 +138,19 @@ export const BaseWidget = memo(function BaseWidget({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onContextMenu={handleContextMenu}
+        onAnimationEnd={(e) => {
+          if (e.animationName === "widget-enter") {
+            useStore.getState().clearEnteringWidget(widgetId)
+          }
+        }}
+        onTransitionEnd={(e) => {
+          if (e.propertyName === "height") setCollapseAnim(false)
+        }}
       >
         {isSelected && <SelectionOutline widgetId={widgetId} />}
 
         <div
+          ref={headerRef}
           {...dragHandlers}
           className="flex items-center justify-between border-b bg-muted/30 px-2 py-1 cursor-grab active:cursor-grabbing shrink-0"
           style={{ touchAction: "none" }}
@@ -152,14 +171,17 @@ export const BaseWidget = memo(function BaseWidget({
             <WidgetToolbar
               widgetId={widgetId}
               collapsed={widget.collapsed}
-              onToggleCollapse={() => toggleCollapse(widgetId)}
+              onToggleCollapse={() => {
+                setCollapseAnim(true)
+                toggleCollapse(widgetId)
+              }}
               onStartRename={handleStartRename}
               hideTitle={hideTitle}
             />
           )}
         </div>
 
-        {!widget.collapsed && (
+        {(!widget.collapsed || collapseAnim) && (
           <div className="flex-1 overflow-auto">
             {children}
           </div>
