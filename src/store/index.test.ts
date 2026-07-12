@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { useStore } from "@/store"
+import { useStore, migratePersistedState, __resetPendingSnapshotForTests } from "@/store"
 import { WidgetType, type Widget } from "@/types"
 
 function makeWidget(id: string, overrides: Partial<Widget> = {}): Widget {
@@ -12,6 +12,7 @@ function makeWidget(id: string, overrides: Partial<Widget> = {}): Widget {
 
 beforeEach(() => {
   localStorage.clear()
+  __resetPendingSnapshotForTests()
   useStore.setState({
     sheets: [{ id: "s1", title: "Sheet 1", widgetOrder: ["w1"], createdAt: 0, updatedAt: 0 }],
     currentSheetId: "s1",
@@ -98,6 +99,54 @@ describe("moveWidget", () => {
   })
 })
 
+describe("moveWidgets", () => {
+  it("changes x/y and does not push an undo snapshot", () => {
+    useStore.setState({ widgets: { w1: makeWidget("w1"), w2: makeWidget("w2") } })
+    useStore.getState().moveWidgets([
+      { id: "w1", x: 10, y: 20 },
+      { id: "w2", x: 30, y: 40 },
+    ])
+    const state = useStore.getState()
+    expect(state.widgets.w1.x).toBe(10)
+    expect(state.widgets.w1.y).toBe(20)
+    expect(state.widgets.w2.x).toBe(30)
+    expect(state.widgets.w2.y).toBe(40)
+    expect(state.undoStack).toHaveLength(0)
+  })
+
+  it("skips unknown ids", () => {
+    useStore.getState().moveWidgets([{ id: "does-not-exist", x: 10, y: 20 }])
+    const state = useStore.getState()
+    expect(state.widgets["does-not-exist"]).toBeUndefined()
+  })
+
+  it("records one undo entry for a two-widget drag across multiple frames and restores both widgets on undo", () => {
+    useStore.setState({ widgets: { w1: makeWidget("w1"), w2: makeWidget("w2", { x: 5, y: 5 }) } })
+    useStore.getState().recordSnapshot()
+
+    useStore.getState().moveWidgets([
+      { id: "w1", x: 10, y: 20 },
+      { id: "w2", x: 15, y: 25 },
+    ])
+    useStore.getState().moveWidgets([
+      { id: "w1", x: 40, y: 50 },
+      { id: "w2", x: 45, y: 55 },
+    ])
+
+    const state = useStore.getState()
+    expect(state.widgets.w1.x).toBe(40)
+    expect(state.widgets.w2.x).toBe(45)
+    expect(state.undoStack).toHaveLength(1)
+
+    useStore.getState().undo()
+    const restored = useStore.getState()
+    expect(restored.widgets.w1.x).toBe(0)
+    expect(restored.widgets.w1.y).toBe(0)
+    expect(restored.widgets.w2.x).toBe(5)
+    expect(restored.widgets.w2.y).toBe(5)
+  })
+})
+
 describe("resizeWidget", () => {
   it("changes width/height and does not push an undo snapshot", () => {
     useStore.getState().resizeWidget("w1", 200, 300)
@@ -177,5 +226,23 @@ describe("deleteWidgets", () => {
     expect(state.widgets.w1).toBeUndefined()
     expect(state.sheets[0].widgetOrder).not.toContain("w1")
     expect(state.selectedWidgetIds).not.toContain("w1")
+  })
+})
+
+describe("migratePersistedState", () => {
+  it("sets canvasState.snapToObjects to true when migrating a v3 blob missing the key", () => {
+    const persisted = {
+      canvasState: { offsetX: 0, offsetY: 0, scale: 1, gridEnabled: true, snapToGrid: true, gridSize: 20 },
+    }
+    const migrated = migratePersistedState(persisted, 3) as { canvasState: { snapToObjects: boolean } }
+    expect(migrated.canvasState.snapToObjects).toBe(true)
+  })
+
+  it("does not override an existing snapToObjects value", () => {
+    const persisted = {
+      canvasState: { offsetX: 0, offsetY: 0, scale: 1, gridEnabled: true, snapToGrid: true, gridSize: 20, snapToObjects: false },
+    }
+    const migrated = migratePersistedState(persisted, 3) as { canvasState: { snapToObjects: boolean } }
+    expect(migrated.canvasState.snapToObjects).toBe(false)
   })
 })

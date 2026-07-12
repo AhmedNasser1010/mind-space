@@ -58,6 +58,7 @@ interface StoreState {
   deleteWidgetAnimated: (sheetId: string, widgetId: string) => void
   deleteWidgetsAnimated: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
+  moveWidgets: (moves: { id: string; x: number; y: number }[]) => void
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
   duplicateWidgets: (sheetId: string, widgetIds: string[]) => void
@@ -106,6 +107,57 @@ export function __resetPendingSnapshotForTests() {
   pendingSnapshot = null
 }
 
+export function migratePersistedState(persisted: unknown, version: number): unknown {
+  const state = persisted as Record<string, unknown>
+  if (version < 1) {
+    // v0 blobs carried full undo/redo history; strip it.
+    delete state.undoStack
+    delete state.redoStack
+  }
+  if (version < 2) {
+    // v1 widgets stored timer/stopwatch progress as tick-decremented
+    // fields; convert to timestamp-based fields. Running timers/
+    // stopwatches become paused at their last known value.
+    const widgets = state.widgets as Record<string, Widget> | undefined
+    if (widgets) {
+      for (const widget of Object.values(widgets)) {
+        if (widget.type === WidgetType.Timer) {
+          const d = widget.data as { duration?: number; remaining?: number } | undefined
+          widget.data = {
+            duration: d?.duration ?? 300,
+            endsAt: null,
+            pausedRemaining: d?.remaining ?? null,
+          }
+        } else if (widget.type === WidgetType.Stopwatch) {
+          const d = widget.data as { elapsed?: number; laps?: number[] } | undefined
+          widget.data = {
+            startedAt: null,
+            accumulated: d?.elapsed ?? 0,
+            laps: d?.laps ?? [],
+          }
+        }
+      }
+    }
+  }
+  if (version < 3) {
+    // v2 (and any earlier) blobs never persisted undo/redo stacks, or
+    // persisted them as full-state JSON-string snapshots (pre-v1).
+    // Neither shape is a valid HistoryEntry[]; drop them and start
+    // fresh rather than risk feeding undo/redo malformed entries.
+    delete state.undoStack
+    delete state.redoStack
+  }
+  if (version < 4) {
+    // v3 blobs never persisted canvasState.snapToObjects; zustand's
+    // shallow merge would leave it undefined. Default it to on.
+    const canvasState = state.canvasState as Partial<CanvasState> | undefined
+    if (canvasState && canvasState.snapToObjects === undefined) {
+      canvasState.snapToObjects = true
+    }
+  }
+  return state
+}
+
 /**
  * Diffs `prevTrio` (the pending snapshot if one is open, else the trio
  * right before this action) against `nextTrio` and returns the undo/redo
@@ -135,6 +187,7 @@ const defaultCanvasState: CanvasState = {
   gridEnabled: true,
   snapToGrid: true,
   gridSize: 20,
+  snapToObjects: true,
 }
 
 const defaultThemeSettings: ThemeSettings = {
@@ -598,6 +651,24 @@ export const useStore = create<StoreState>()(
         })
       },
 
+      moveWidgets: (moves) => {
+        set((state) => {
+          const widgets = { ...state.widgets }
+          for (const { id, x, y } of moves) {
+            const widget = widgets[id]
+            if (!widget) continue
+            widgets[id] = { ...widget, x, y }
+          }
+          if (!pendingSnapshot) {
+            return { widgets }
+          }
+          return {
+            widgets,
+            ...pushHistoryEntry(state, trioOf(state), { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId }),
+          }
+        })
+      },
+
       resizeWidget: (id, width, height) => {
         set((state) => {
           const widget = state.widgets[id]
@@ -945,49 +1016,8 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: 3,
-      migrate: (persisted: unknown, version: number) => {
-        const state = persisted as Record<string, unknown>
-        if (version < 1) {
-          // v0 blobs carried full undo/redo history; strip it.
-          delete state.undoStack
-          delete state.redoStack
-        }
-        if (version < 2) {
-          // v1 widgets stored timer/stopwatch progress as tick-decremented
-          // fields; convert to timestamp-based fields. Running timers/
-          // stopwatches become paused at their last known value.
-          const widgets = state.widgets as Record<string, Widget> | undefined
-          if (widgets) {
-            for (const widget of Object.values(widgets)) {
-              if (widget.type === WidgetType.Timer) {
-                const d = widget.data as { duration?: number; remaining?: number } | undefined
-                widget.data = {
-                  duration: d?.duration ?? 300,
-                  endsAt: null,
-                  pausedRemaining: d?.remaining ?? null,
-                }
-              } else if (widget.type === WidgetType.Stopwatch) {
-                const d = widget.data as { elapsed?: number; laps?: number[] } | undefined
-                widget.data = {
-                  startedAt: null,
-                  accumulated: d?.elapsed ?? 0,
-                  laps: d?.laps ?? [],
-                }
-              }
-            }
-          }
-        }
-        if (version < 3) {
-          // v2 (and any earlier) blobs never persisted undo/redo stacks, or
-          // persisted them as full-state JSON-string snapshots (pre-v1).
-          // Neither shape is a valid HistoryEntry[]; drop them and start
-          // fresh rather than risk feeding undo/redo malformed entries.
-          delete state.undoStack
-          delete state.redoStack
-        }
-        return state
-      },
+      version: 4,
+      migrate: migratePersistedState,
       partialize: (state) => ({
         sheets: state.sheets,
         currentSheetId: state.currentSheetId,
