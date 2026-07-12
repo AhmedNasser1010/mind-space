@@ -1,0 +1,90 @@
+- generic:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - button
+              - generic:
+                - button:
+                  - generic: Welcome!
+                - generic:
+                  - button
+          - generic:
+            - generic:
+              - textbox:
+                - /placeholder: Type your notes here...
+                - text: Welcome to Mind Space! This is your personal canvas for organizing thoughts, tasks, and ideas. Start by editing this note, checking off the todo items, or adding more widgets with the + button.
+        - generic:
+          - generic:
+            - generic:
+              - button
+              - generic:
+                - button:
+                  - generic: Getting Started
+                - generic:
+                  - button
+          - generic:
+            - generic:
+              - generic:
+                - generic: 0/3
+                - button
+              - generic:
+                - generic:
+                  - button
+                  - button: Pan the canvas (hold Space + drag)
+                  - button
+                - generic:
+                  - button
+                  - button: Add widgets from the + button
+                  - button
+                - generic:
+                  - button
+                  - button: Create new sheets in the sidebar
+                  - button
+        - generic:
+          - generic:
+            - generic:
+              - button
+              - generic:
+                - button:
+                  - generic: Quick Links
+                - generic:
+                  - button
+          - generic:
+            - generic:
+              - generic:
+                - button:
+                  - generic:
+                    - paragraph: No URL set
+                    - paragraph: Click edit to add URL
+                - button
+        - generic:
+          - generic:
+            - button
+          - button
+          - generic: 100%
+          - button
+          - button
+          - button
+          - button
+          - generic:
+            - button
+    - generic:
+      - generic:
+        - button
+      - generic:
+        - generic:
+          - generic: Sheet 1
+          - generic:
+            - button
+  - button "Open Next.js Dev Tools" [ref=e61] [cursor=pointer]
+  - alert
+  - menu [active] [ref=e212]:
+    - menuitem "Rename" [ref=e213]
+    - menuitem "Duplicate" [ref=e217]
+    - separator [ref=e221]
+    - menuitem "Color" [ref=e222]
+    - separator [ref=e231]
+    - menuitem "Delete" [ref=e232]

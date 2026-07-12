@@ -1,0 +1,19 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e11]:
+        - paragraph [ref=e12]: No sheet selected
+        - paragraph [ref=e13]: Create or select a sheet from the sidebar
+      - generic [ref=e14]:
+        - button "Toggle theme" [ref=e16]
+        - button "Zoom in" [ref=e24]
+        - generic [ref=e28]: 100%
+        - button "Zoom out" [ref=e29]
+        - button "Fit to screen" [ref=e34]
+        - button "Reset zoom" [ref=e40]
+        - 'button "Snap to grid: on" [ref=e44]'
+        - button "Add widget" [ref=e49]
+    - button "New Sheet" [ref=e53]
+  - region "Notifications (F8)":
+    - list
+  - button "Open Next.js Dev Tools" [ref=e61] [cursor=pointer]
