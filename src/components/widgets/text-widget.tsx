@@ -66,7 +66,7 @@ export const TextWidget = memo(function TextWidget({ widgetId }: { widgetId: str
   if (!widget) return null
 
   return (
-    <div className="flex h-full items-center p-4">
+    <div className="flex h-full items-center justify-center p-4">
       <InlineInput
         inputRef={inputRef}
         value={title}
@@ -77,7 +77,7 @@ export const TextWidget = memo(function TextWidget({ widgetId }: { widgetId: str
         onBlur={handleCommit}
         onPointerDown={handlePointerDown}
         autoFocus={false}
-        className="h-auto w-full border-0 bg-transparent px-0 py-0 text-3xl font-semibold leading-tight tracking-tight text-foreground shadow-none focus:ring-0"
+        className="h-auto w-full border-0 bg-transparent px-0 py-0 text-center text-3xl font-semibold leading-tight tracking-tight text-foreground shadow-none focus:ring-0"
       />
     </div>
   )
