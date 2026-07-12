@@ -32,7 +32,10 @@ interface StoreState {
   currentSheetId: string | null
   widgets: Record<string, Widget>
   selectedWidgetIds: string[]
+  enteringWidgetIds: string[]
+  exitingWidgetIds: string[]
   canvasState: CanvasState
+  canvasAnimating: boolean
   themeSettings: ThemeSettings
   undoStack: string[]
   redoStack: string[]
@@ -48,8 +51,12 @@ interface StoreState {
 
   addWidget: (sheetId: string, widget: Widget) => void
   updateWidget: (id: string, updates: Partial<Widget>) => void
+  updateWidgetSilent: (id: string, updates: Partial<Widget>) => void
+  recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
+  deleteWidgetAnimated: (sheetId: string, widgetId: string) => void
+  deleteWidgetsAnimated: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
   resizeWidget: (id: string, width: number, height: number) => void
   duplicateWidget: (sheetId: string, widgetId: string) => void
@@ -61,9 +68,11 @@ interface StoreState {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   deselectAll: () => void
+  clearEnteringWidget: (id: string) => void
 
   setCanvasState: (state: Partial<CanvasState>) => void
   resetCanvasView: () => void
+  setCanvasAnimating: (v: boolean) => void
 
   setThemeSettings: (settings: Partial<ThemeSettings>) => void
 
@@ -231,7 +240,10 @@ export const useStore = create<StoreState>()(
       currentSheetId: null,
       widgets: {},
       selectedWidgetIds: [],
+      enteringWidgetIds: [],
+      exitingWidgetIds: [],
       canvasState: defaultCanvasState,
+      canvasAnimating: false,
       themeSettings: defaultThemeSettings,
       undoStack: [],
       redoStack: [],
@@ -377,11 +389,16 @@ export const useStore = create<StoreState>()(
       },
 
       reorderSheetWidgets: (sheetId, widgetOrder) => {
-        set((state) => ({
-          sheets: state.sheets.map((s) =>
-            s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
-          ),
-        }))
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
       },
 
       addWidget: (sheetId, widget) => {
@@ -398,6 +415,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, widget.id],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -418,6 +436,21 @@ export const useStore = create<StoreState>()(
             redoStack: [],
           }
         })
+      },
+
+      updateWidgetSilent: (id, updates) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          return { widgets: { ...state.widgets, [id]: { ...widget, ...updates } } }
+        })
+      },
+
+      recordSnapshot: () => {
+        set((state) => ({
+          undoStack: [...state.undoStack, takeSnapshot(state.sheets, state.widgets, state.currentSheetId)].slice(-MAX_HISTORY),
+          redoStack: [],
+        }))
       },
 
       deleteWidgets: (sheetId, widgetIds) => {
@@ -472,6 +505,29 @@ export const useStore = create<StoreState>()(
             redoStack: [],
           }
         })
+      },
+
+      deleteWidgetAnimated: (sheetId, widgetId) => {
+        const { exitingWidgetIds } = get()
+        if (exitingWidgetIds.includes(widgetId)) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, widgetId] })
+        setTimeout(() => {
+          get().deleteWidget(sheetId, widgetId)
+          set((s) => ({ exitingWidgetIds: s.exitingWidgetIds.filter((x) => x !== widgetId) }))
+        }, 160)
+      },
+
+      deleteWidgetsAnimated: (sheetId, widgetIds) => {
+        const { exitingWidgetIds } = get()
+        const newIds = widgetIds.filter((id) => !exitingWidgetIds.includes(id))
+        if (newIds.length === 0) return
+        set({ exitingWidgetIds: [...exitingWidgetIds, ...newIds] })
+        setTimeout(() => {
+          get().deleteWidgets(sheetId, newIds)
+          set((s) => ({
+            exitingWidgetIds: s.exitingWidgetIds.filter((x) => !newIds.includes(x)),
+          }))
+        }, 160)
       },
 
       moveWidget: (id, x, y) => {
@@ -536,6 +592,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -572,6 +629,7 @@ export const useStore = create<StoreState>()(
                   }
                 : s
             ),
+            enteringWidgetIds: [...state.enteringWidgetIds, duplicate.id],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -634,6 +692,12 @@ export const useStore = create<StoreState>()(
         set({ selectedWidgetIds: [] })
       },
 
+      clearEnteringWidget: (id) => {
+        set((state) => ({
+          enteringWidgetIds: state.enteringWidgetIds.filter((x) => x !== id),
+        }))
+      },
+
       setCanvasState: (newState) => {
         set((prev) => ({
           canvasState: { ...prev.canvasState, ...newState },
@@ -642,6 +706,10 @@ export const useStore = create<StoreState>()(
 
       resetCanvasView: () => {
         set({ canvasState: defaultCanvasState })
+      },
+
+      setCanvasAnimating: (v) => {
+        set({ canvasAnimating: v })
       },
 
       setThemeSettings: (settings) => {
@@ -715,6 +783,7 @@ export const useStore = create<StoreState>()(
                 : s
             ),
             selectedWidgetIds: newIds,
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
             redoStack: [],
           }
@@ -758,7 +827,13 @@ export const useStore = create<StoreState>()(
       undo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (undoStack.length === 0) return
-        const previous: Snapshot = JSON.parse(undoStack[undoStack.length - 1])
+        let previous: Snapshot
+        try {
+          previous = JSON.parse(undoStack[undoStack.length - 1])
+        } catch {
+          set({ undoStack: undoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...previous,
@@ -771,7 +846,13 @@ export const useStore = create<StoreState>()(
       redo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (redoStack.length === 0) return
-        const next: Snapshot = JSON.parse(redoStack[redoStack.length - 1])
+        let next: Snapshot
+        try {
+          next = JSON.parse(redoStack[redoStack.length - 1])
+        } catch {
+          set({ redoStack: redoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...next,
@@ -784,8 +865,41 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
-      version: PERSIST_VERSION,
-      migrate,
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as Record<string, unknown>
+        if (version < 1) {
+          // v0 blobs carried full undo/redo history; strip it.
+          delete state.undoStack
+          delete state.redoStack
+        }
+        if (version < 2) {
+          // v1 widgets stored timer/stopwatch progress as tick-decremented
+          // fields; convert to timestamp-based fields. Running timers/
+          // stopwatches become paused at their last known value.
+          const widgets = state.widgets as Record<string, Widget> | undefined
+          if (widgets) {
+            for (const widget of Object.values(widgets)) {
+              if (widget.type === WidgetType.Timer) {
+                const d = widget.data as { duration?: number; remaining?: number } | undefined
+                widget.data = {
+                  duration: d?.duration ?? 300,
+                  endsAt: null,
+                  pausedRemaining: d?.remaining ?? null,
+                }
+              } else if (widget.type === WidgetType.Stopwatch) {
+                const d = widget.data as { elapsed?: number; laps?: number[] } | undefined
+                widget.data = {
+                  startedAt: null,
+                  accumulated: d?.elapsed ?? 0,
+                  laps: d?.laps ?? [],
+                }
+              }
+            }
+          }
+        }
+        return state
+      },
       partialize: (state) => ({
         sheets: state.sheets,
         currentSheetId: state.currentSheetId,

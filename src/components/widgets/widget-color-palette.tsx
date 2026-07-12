@@ -31,7 +31,7 @@ export const WidgetColorPalette = memo(function WidgetColorPalette({
       <div className={cn("grid gap-1 p-1", compact ? "grid-cols-6" : "grid-cols-6")}>
         <button
           className={cn(
-            "h-5 w-5 rounded-full border-2 transition-all",
+            "h-5 w-5 rounded-full border-2 transition-colors",
             (!currentId || currentId === "default")
               ? "border-ring ring-1 ring-ring"
               : "border-border hover:border-muted-foreground"
@@ -45,7 +45,7 @@ export const WidgetColorPalette = memo(function WidgetColorPalette({
           <button
             key={t.id}
             className={cn(
-              "h-5 w-5 rounded-full border-2 transition-all",
+              "h-5 w-5 rounded-full border-2 transition-colors",
               currentId === t.id
                 ? "border-ring ring-1 ring-ring"
                 : "border-border hover:border-muted-foreground"
