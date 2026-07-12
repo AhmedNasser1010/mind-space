@@ -1,45 +1,15 @@
 "use client"
 
-import { useMemo, useRef, memo } from "react"
+import { useMemo, useRef } from "react"
 import { useStore } from "@/store"
-import type { WidgetType } from "@/types"
-import { BaseWidget } from "@/components/widgets/base-widget"
-import { widgetComponents } from "@/components/widgets/widget-registry"
 import { EmptyState } from "@/components/ui/empty-state"
 import { ZoomControls } from "./zoom-controls"
-import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
-import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
+import { CanvasWidget } from "./canvas-widget"
 import { MarqueeOverlay } from "./marquee-overlay"
 import { SnapGuides } from "./snap-guides"
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
+import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
 import { LayoutTemplate } from "lucide-react"
-
-const CanvasWidget = memo(function CanvasWidget({ widgetId }: { widgetId: string }) {
-  const type = useStore((s) => s.widgets[widgetId]?.type)
-  const title = useStore((s) => s.widgets[widgetId]?.title)
-
-  if (!type) return null
-
-  const WidgetComponent = widgetComponents[type as WidgetType]
-
-  return (
-    <div data-widget>
-      <BaseWidget widgetId={widgetId} hideTitle={type === "text"}>
-        {WidgetComponent ? (
-          <WidgetComponent widgetId={widgetId} />
-        ) : (
-          <div className="flex h-full flex-col p-4">
-            <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">
-              {type}
-            </span>
-            <span className="mt-1.5 text-sm font-semibold leading-tight">
-              {title}
-            </span>
-          </div>
-        )}
-      </BaseWidget>
-    </div>
-  )
-})
 
 export function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null)

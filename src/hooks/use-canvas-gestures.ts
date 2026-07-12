@@ -110,17 +110,23 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
 
       if (e.button !== 0) return
 
-      // Empty-canvas plain drag: marquee select instead of pan.
-      initialSelection.current = useStore.getState().selectedWidgetIds
-      marqueeAdditive.current = e.shiftKey || e.metaKey || e.ctrlKey
-      if (!marqueeAdditive.current) {
+      if (e.metaKey || e.ctrlKey) {
+        // Cmd/Ctrl + drag: marquee select
+        initialSelection.current = useStore.getState().selectedWidgetIds
+        marqueeAdditive.current = e.shiftKey
+        if (!marqueeAdditive.current) {
+          deselectAll()
+        }
+        const world = worldPoint(e.clientX, e.clientY)
+        marqueeStartWorld.current = world
+        marqueeStartClient.current = { x: e.clientX, y: e.clientY }
+        isMarqueeing.current = true
+        e.currentTarget.setPointerCapture(e.pointerId)
+      } else {
+        // Plain drag: pan
         deselectAll()
+        startPan(e)
       }
-      const world = worldPoint(e.clientX, e.clientY)
-      marqueeStartWorld.current = world
-      marqueeStartClient.current = { x: e.clientX, y: e.clientY }
-      isMarqueeing.current = true
-      e.currentTarget.setPointerCapture(e.pointerId)
     },
     [deselectAll, startPan, startPinch, worldPoint]
   )

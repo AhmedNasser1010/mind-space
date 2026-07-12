@@ -720,6 +720,7 @@ export const useStore = create<StoreState>()(
           return {
             widgets,
             sheets,
+            enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
             ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })

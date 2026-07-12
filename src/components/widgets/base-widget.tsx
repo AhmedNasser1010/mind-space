@@ -26,6 +26,8 @@ export const BaseWidget = memo(function BaseWidget({
   const [renameValue, setRenameValue] = useState("")
   const renameInputRef = useRef<HTMLInputElement>(null)
   const headerRef = useRef<HTMLDivElement>(null)
+  const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
+  const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
   const [collapseAnim, setCollapseAnim] = useState(false)
   const pendingCollapse = useRef<{ x: number; y: number } | null>(null)
   const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
@@ -42,6 +44,8 @@ export const BaseWidget = memo(function BaseWidget({
 
   const { resolvedTheme } = useTheme()
   const dragHandlers = useWidgetDrag(widgetId)
+
+  const isSelected = selectedWidgetIds.includes(widgetId)
 
   const themeVars = useMemo(
     () => getThemeVariables(widget?.colorTheme, resolvedTheme === "dark"),
