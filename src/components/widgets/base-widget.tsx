@@ -46,8 +46,6 @@ export const BaseWidget = memo(function BaseWidget({
   const { resolvedTheme } = useTheme()
   const dragHandlers = useWidgetDrag(widgetId)
 
-  const isSelected = selectedWidgetIds.includes(widgetId)
-
   const themeVars = useMemo(
     () => getThemeVariables(widget?.colorTheme, resolvedTheme === "dark"),
     [widget?.colorTheme, resolvedTheme]
