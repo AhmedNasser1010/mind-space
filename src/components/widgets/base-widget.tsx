@@ -148,12 +148,15 @@ export const BaseWidget = memo(function BaseWidget({
           if (e.propertyName === "height") setCollapseAnim(false)
         }}
       >
-        {isSelected && <SelectionOutline widgetId={widgetId} />}
+        {isSelected && <SelectionOutline widgetId={widgetId} collapsed={widget.collapsed} />}
 
         <div
           ref={headerRef}
           {...dragHandlers}
-          className="flex items-center justify-between border-b bg-muted/30 px-2 py-1 cursor-grab active:cursor-grabbing shrink-0"
+          className={cn(
+            "flex items-center justify-between bg-muted/30 px-2 py-1 cursor-grab active:cursor-grabbing shrink-0",
+            widget.collapsed ? "rounded-xl" : "rounded-t-xl border-b"
+          )}
           style={{ touchAction: "none" }}
         >
           {renaming ? (

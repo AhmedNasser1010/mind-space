@@ -6,10 +6,11 @@ import { useStore } from "@/store"
 import { IconButton } from "@/components/ui/icon-button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { useConfirm } from "@/components/ui/confirm-dialog"
-import { useToast } from "@/components/ui/toast"
+import { toast } from "sonner"
 import { buildBackup, downloadBackup, parseBackup } from "@/lib/backup"
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Grid3x3, Download, Upload } from "lucide-react"
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Paintbrush, Download, Upload } from "lucide-react"
 import { AddWidgetButton } from "./add-widget-button"
+import { BackgroundPicker } from "./background-picker"
 
 function stopPropagation(e: PointerEvent) {
   e.stopPropagation()
@@ -44,9 +45,12 @@ function zoomAtCenter(factor: number) {
 export const ZoomControls = memo(function ZoomControls() {
   const canvasState = useStore((s) => s.canvasState)
   const setCanvasState = useStore((s) => s.setCanvasState)
+  const canvasBackground = useStore((s) => s.canvasBackground)
+  const setCanvasBackground = useStore((s) => s.setCanvasBackground)
+  const resizeHandleStyle = useStore((s) => s.resizeHandleStyle)
+  const setResizeHandleStyle = useStore((s) => s.setResizeHandleStyle)
   const importState = useStore((s) => s.importState)
   const confirm = useConfirm()
-  const { addToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const zoomPercent = Math.round(canvasState.scale * 100)
@@ -104,11 +108,6 @@ export const ZoomControls = memo(function ZoomControls() {
     setCanvasState({ scale, offsetX, offsetY })
   }, [setCanvasState])
 
-  const toggleSnap = useCallback(() => {
-    const { canvasState: cs } = useStore.getState()
-    setCanvasState({ snapToGrid: !cs.snapToGrid })
-  }, [setCanvasState])
-
   const exportBackup = useCallback(() => {
     const { sheets, widgets, currentSheetId } = useStore.getState()
     const backup = buildBackup(sheets, widgets, currentSheetId)
@@ -130,10 +129,8 @@ export const ZoomControls = memo(function ZoomControls() {
       try {
         backup = parseBackup(text)
       } catch (err) {
-        addToast({
-          title: "Import failed",
+        toast.error("Import failed", {
           description: err instanceof Error ? err.message : "Unknown error",
-          variant: "destructive",
         })
         return
       }
@@ -149,9 +146,9 @@ export const ZoomControls = memo(function ZoomControls() {
       if (!confirmed) return
 
       importState(backup)
-      addToast({ title: "Backup imported", variant: "success" })
+      toast.success("Backup imported")
     },
-    [confirm, importState, addToast]
+    [confirm, importState]
   )
 
   return (
@@ -187,14 +184,19 @@ export const ZoomControls = memo(function ZoomControls() {
         <RotateCcw className="h-4 w-4" />
       </IconButton>
 
-      <IconButton
-        label={canvasState.snapToGrid ? "Snap to grid: on" : "Snap to grid: off"}
-        size="md"
-        active={canvasState.snapToGrid}
-        onClick={toggleSnap}
-      >
-        <Grid3x3 className="h-4 w-4" />
-      </IconButton>
+      <div className="h-px bg-border mx-1" />
+
+      <BackgroundPicker
+        value={canvasBackground}
+        onChange={setCanvasBackground}
+        resizeHandleStyle={resizeHandleStyle}
+        onResizeHandleStyleChange={setResizeHandleStyle}
+        trigger={
+          <IconButton label="Canvas background" size="md">
+            <Paintbrush className="h-4 w-4" />
+          </IconButton>
+        }
+      />
 
       <div className="h-px bg-border mx-1" />
 
@@ -214,6 +216,7 @@ export const ZoomControls = memo(function ZoomControls() {
       />
 
       <div className="h-px bg-border mx-1" />
+
 
       <AddWidgetButton />
     </div>

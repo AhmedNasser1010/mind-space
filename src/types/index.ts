@@ -24,6 +24,34 @@ export interface Widget {
   colorTheme?: string
 }
 
+export interface List {
+  id: string
+  name: string
+  createdAt: number
+}
+
+export type ListItemStatus = "todo" | "progress" | "done"
+
+export interface ListItem {
+  id: string
+  listId: string
+  text: string
+  status: ListItemStatus
+  order: string
+  tags: string[]
+  createdAt: number
+  completedAt?: number
+}
+
+export type BackgroundPattern = "grid" | "dots" | "none"
+
+export type ResizeHandleStyle = "corners" | "invisible" | "brackets"
+
+export interface CanvasBackground {
+  color: string
+  pattern: BackgroundPattern
+}
+
 export interface Sheet {
   id: string
   title: string
@@ -31,14 +59,13 @@ export interface Sheet {
   widgetOrder: string[]
   createdAt: number
   updatedAt: number
+  background?: Partial<CanvasBackground>
 }
 
 export interface CanvasState {
   offsetX: number
   offsetY: number
   scale: number
-  gridEnabled: boolean
-  snapToGrid: boolean
   gridSize: number
   snapToObjects: boolean
 }

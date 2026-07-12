@@ -3,6 +3,7 @@
 import { memo, useCallback, useState, useRef, useEffect } from "react"
 import { useStore } from "@/store"
 import { IconButton } from "@/components/ui/icon-button"
+import { quantize } from "@/lib/geometry"
 import { Plus } from "lucide-react"
 import type { WidgetType } from "@/types"
 import { WIDGET_DEFS } from "@/components/widgets/widget-registry"
@@ -16,8 +17,11 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   const addWidget = useStore((s) => s.addWidget)
+  const createList = useStore((s) => s.createList)
+  const recordSnapshot = useStore((s) => s.recordSnapshot)
   const currentSheetId = useStore((s) => s.currentSheetId)
   const canvasState = useStore((s) => s.canvasState)
+  const gridSize = useStore((s) => s.canvasState.gridSize)
 
   const handleAddWidget = useCallback(
     (type: WidgetType) => {
@@ -25,7 +29,6 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
       const def = WIDGET_DEFS[type]
       if (!def) return
       const id = crypto.randomUUID()
-
       const container = document.querySelector<HTMLElement>('[data-container="canvas"]')
       const rect = container?.getBoundingClientRect()
       const cx = (rect?.width ?? window.innerWidth) / 2
@@ -33,21 +36,30 @@ export const AddWidgetButton = memo(function AddWidgetButton() {
       const centerX = (cx - canvasState.offsetX) / canvasState.scale
       const centerY = (cy - canvasState.offsetY) / canvasState.scale
 
+      const isTodo = type === "todo"
+
+      // Creating a todo widget also creates its backing list - both must
+      // land as a single undo entry, matching every other single-action
+      // widget-add. recordSnapshot() + two mutations collapses to one
+      // history entry (same two-phase pattern drag/resize use).
+      if (isTodo) recordSnapshot()
+      const listId = isTodo ? createList(def.defaultTitle) : null
+
       addWidget(currentSheetId, {
         id,
         type,
         title: def.defaultTitle,
-        x: centerX - def.defaultSize.width / 2,
-        y: centerY - def.defaultSize.height / 2,
-        width: def.defaultSize.width,
-        height: def.defaultSize.height,
+        x: quantize(centerX - def.defaultSize.width / 2, gridSize),
+        y: quantize(centerY - def.defaultSize.height / 2, gridSize),
+        width: quantize(def.defaultSize.width, gridSize),
+        height: quantize(def.defaultSize.height, gridSize),
         zIndex: Date.now(),
         collapsed: false,
-        data: def.defaultData,
+        data: listId ? { view: { source: { listId } } } : def.defaultData,
       })
       setOpen(false)
     },
-    [addWidget, currentSheetId, canvasState]
+    [addWidget, createList, recordSnapshot, currentSheetId, canvasState, gridSize]
   )
 
   useEffect(() => {
