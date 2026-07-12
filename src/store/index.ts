@@ -2,6 +2,8 @@ import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings } from "@/types"
 import type { BackupFile } from "@/lib/backup"
+import type { HistoryTrio } from "@/lib/history-diff"
+import { diffForHistory, applyHistoryEntry, isValidHistoryEntry, type HistoryEntry } from "@/lib/history-diff"
 
 interface ClipboardData {
   widgets: (Pick<Widget, "type" | "title" | "width" | "height" | "data" | "collapsed"> & { x: number; y: number })[]
@@ -70,6 +72,7 @@ interface StoreState {
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
   deselectAll: () => void
+  setSelection: (ids: string[]) => void
   clearEnteringWidget: (id: string) => void
 
   setCanvasState: (state: Partial<CanvasState>) => void
@@ -507,19 +510,10 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets: { ...state.widgets, [widget.id]: widget },
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: [...s.widgetOrder, widget.id],
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            widgets,
+            sheets,
             enteringWidgetIds: [...state.enteringWidgetIds, widget.id],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -724,19 +718,10 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets: { ...state.widgets, ...newWidgets },
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: [...s.widgetOrder, ...newIds],
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            widgets,
+            sheets,
             enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -812,19 +797,10 @@ export const useStore = create<StoreState>()(
               : s
           )
           return {
-            widgets: { ...state.widgets, [duplicate.id]: duplicate },
-            sheets: state.sheets.map((s) =>
-              s.id === sheetId
-                ? {
-                    ...s,
-                    widgetOrder: [...s.widgetOrder, duplicate.id],
-                    updatedAt: Date.now(),
-                  }
-                : s
-            ),
+            widgets,
+            sheets,
             enteringWidgetIds: [...state.enteringWidgetIds, duplicate.id],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
@@ -883,6 +859,10 @@ export const useStore = create<StoreState>()(
 
       deselectAll: () => {
         set({ selectedWidgetIds: [] })
+      },
+
+      setSelection: (ids) => {
+        set({ selectedWidgetIds: ids })
       },
 
       clearEnteringWidget: (id) => {
@@ -979,15 +959,14 @@ export const useStore = create<StoreState>()(
             sheets,
             selectedWidgetIds: newIds,
             enteringWidgetIds: [...state.enteringWidgetIds, ...newIds],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: state.currentSheetId }),
           }
         })
       },
 
       importState: (backup) => {
         set((state) => {
-          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          const prevTrio = trioOf(state)
 
           let sheets = backup.sheets
           let widgets = backup.widgets
@@ -1013,8 +992,7 @@ export const useStore = create<StoreState>()(
             widgets,
             currentSheetId: resolvedCurrentSheetId,
             selectedWidgetIds: [],
-            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
-            redoStack: [],
+            ...pushHistoryEntry(state, prevTrio, { sheets, widgets, currentSheetId: resolvedCurrentSheetId }),
           }
         })
       },
