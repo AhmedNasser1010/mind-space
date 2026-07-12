@@ -9,9 +9,19 @@ import { Play, Pause, RotateCcw } from "lucide-react"
 
 interface TimerData {
   duration: number
-  remaining: number
-  running: boolean
-  paused: boolean
+  endsAt: number | null
+  pausedRemaining: number | null
+}
+
+function computeRemaining(data: TimerData): number {
+  const duration = data.duration ?? 300
+  if (data.endsAt != null) {
+    return Math.max(0, (data.endsAt - Date.now()) / 1000)
+  }
+  if (data.pausedRemaining != null) {
+    return data.pausedRemaining
+  }
+  return duration
 }
 
 export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: string }) {
@@ -23,54 +33,63 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
 
   const data = useMemo(() => getWidgetData<TimerData>(widget), [widget])
   const duration = data.duration ?? 300
-  const remaining = data.remaining ?? duration
-  const running = data.running ?? false
-  const paused = data.paused ?? false
+  const running = data.endsAt != null
+  const paused = data.pausedRemaining != null
+
+  const [remaining, setRemaining] = useState(() => computeRemaining(data))
 
   useEffect(() => {
-    if (!running || paused) return
+    setRemaining(computeRemaining(data))
+  }, [data])
+
+  useEffect(() => {
+    if (!running) return
     const interval = setInterval(() => {
       const w = useStore.getState().widgets[widgetId]
       if (!w) return
       const d = getWidgetData<TimerData>(w)
-      const newRemaining = Math.max(0, (d.remaining ?? duration) - 0.1)
+      const newRemaining = computeRemaining(d)
       if (newRemaining <= 0) {
         updateWidget(widgetId, {
-          data: { ...d, remaining: 0, running: false, paused: false },
+          data: { ...d, endsAt: null, pausedRemaining: 0 },
         })
         clearInterval(interval)
       } else {
-        updateWidget(widgetId, {
-          data: { ...d, remaining: Number(newRemaining.toFixed(1)) },
-        })
+        setRemaining(newRemaining)
       }
     }, 100)
     return () => clearInterval(interval)
-  }, [running, paused, widgetId, updateWidget, duration])
+  }, [running, widgetId, updateWidget])
 
   const minutes = Math.floor(remaining / 60)
   const seconds = Math.floor(remaining % 60)
   const tenths = Math.floor((remaining - Math.floor(remaining)) * 10)
 
   const handleStart = useCallback(() => {
+    const remainingSeconds = remaining || duration
     updateWidget(widgetId, {
-      data: { ...data, running: true, paused: false, remaining: remaining || duration },
+      data: { ...data, endsAt: Date.now() + remainingSeconds * 1000, pausedRemaining: null },
     })
   }, [updateWidget, widgetId, data, remaining, duration])
 
   const handlePause = useCallback(() => {
-    updateWidget(widgetId, { data: { ...data, paused: true } })
+    updateWidget(widgetId, {
+      data: { ...data, endsAt: null, pausedRemaining: computeRemaining(data) },
+    })
   }, [updateWidget, widgetId, data])
 
   const handleResume = useCallback(() => {
-    updateWidget(widgetId, { data: { ...data, paused: false } })
-  }, [updateWidget, widgetId, data])
+    const remainingSeconds = data.pausedRemaining ?? duration
+    updateWidget(widgetId, {
+      data: { ...data, endsAt: Date.now() + remainingSeconds * 1000, pausedRemaining: null },
+    })
+  }, [updateWidget, widgetId, data, duration])
 
   const handleReset = useCallback(() => {
     updateWidget(widgetId, {
-      data: { ...data, remaining: duration, running: false, paused: false },
+      data: { ...data, endsAt: null, pausedRemaining: null },
     })
-  }, [updateWidget, widgetId, data, duration])
+  }, [updateWidget, widgetId, data])
 
   const handleStartEdit = useCallback(() => {
     setDurationInput(String(duration))
@@ -82,7 +101,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
     const val = parseInt(durationInput, 10)
     if (!isNaN(val) && val > 0) {
       updateWidget(widgetId, {
-        data: { ...data, duration: val, remaining: val, running: false, paused: false },
+        data: { ...data, duration: val, endsAt: null, pausedRemaining: null },
       })
     }
     setEditingDuration(false)
@@ -112,7 +131,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
             "text-4xl font-mono font-bold tabular-nums tracking-tight cursor-pointer",
             isComplete && "text-destructive animate-pulse"
           )}
-          onClick={!running ? handleStartEdit : undefined}
+          onClick={(!running && !paused) || isComplete ? handleStartEdit : undefined}
           title="Click to set duration"
         >
           {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
@@ -121,12 +140,12 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
       )}
 
       <div className="flex items-center gap-2">
-        {!running && !isComplete && (
+        {!running && !paused && !isComplete && (
           <RoundButton label="Start" variant="primary" onClick={handleStart}>
             <Play className="h-4 w-4 fill-current" />
           </RoundButton>
         )}
-        {running && !paused && (
+        {running && (
           <RoundButton
             label="Pause"
             onClick={handlePause}
@@ -135,7 +154,7 @@ export const TimerWidget = memo(function TimerWidget({ widgetId }: { widgetId: s
             <Pause className="h-4 w-4 fill-current" />
           </RoundButton>
         )}
-        {running && paused && (
+        {!running && paused && remaining > 0 && (
           <RoundButton label="Resume" variant="primary" onClick={handleResume}>
             <Play className="h-4 w-4 fill-current" />
           </RoundButton>

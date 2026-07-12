@@ -1,16 +1,23 @@
 "use client"
 
-import { memo, useCallback, useEffect, useMemo, useRef } from "react"
+import { memo, useCallback, useEffect, useMemo, useState } from "react"
 import { useStore } from "@/store"
 import { getWidgetData } from "@/lib/widget-utils"
 import { RoundButton } from "@/components/ui/icon-button"
 import { Play, Square, RotateCcw, Flag } from "lucide-react"
 
 interface StopwatchData {
-  elapsed: number
-  running: boolean
-  paused: boolean
+  startedAt: number | null
+  accumulated: number
   laps: number[]
+}
+
+function computeElapsed(data: StopwatchData): number {
+  const accumulated = data.accumulated ?? 0
+  if (data.startedAt != null) {
+    return accumulated + (Date.now() - data.startedAt)
+  }
+  return accumulated
 }
 
 function formatTime(ms: number) {
@@ -36,26 +43,28 @@ function formatLap(ms: number) {
 export const StopwatchWidget = memo(function StopwatchWidget({ widgetId }: { widgetId: string }) {
   const widget = useStore((s) => s.widgets[widgetId])
   const updateWidget = useStore((s) => s.updateWidget)
-  const elapsedRef = useRef(0)
 
   const data = useMemo(() => getWidgetData<StopwatchData>(widget), [widget])
-  const running = data.running ?? false
-  const paused = data.paused ?? false
+  const running = data.startedAt != null
+  const paused = !running && (data.accumulated ?? 0) > 0
   const laps = useMemo(() => data.laps ?? [], [data.laps])
 
-  elapsedRef.current = data.elapsed ?? 0
+  const [elapsed, setElapsed] = useState(() => computeElapsed(data))
+
+  useEffect(() => {
+    setElapsed(computeElapsed(data))
+  }, [data])
 
   useEffect(() => {
     if (!running) return
-    const start = performance.now() - elapsedRef.current
     const interval = setInterval(() => {
       const w = useStore.getState().widgets[widgetId]
       if (!w) return
       const d = getWidgetData<StopwatchData>(w)
-      updateWidget(widgetId, { data: { ...d, elapsed: performance.now() - start } })
-    }, 10)
+      setElapsed(computeElapsed(d))
+    }, 50)
     return () => clearInterval(interval)
-  }, [running, widgetId, updateWidget])
+  }, [running, widgetId])
 
   const handleStart = useCallback(() => {
     const s = useStore.getState().widgets[widgetId]
@@ -64,9 +73,8 @@ export const StopwatchWidget = memo(function StopwatchWidget({ widgetId }: { wid
     updateWidget(widgetId, {
       data: {
         ...d,
-        running: true,
-        paused: false,
-        elapsed: paused ? d.elapsed ?? 0 : 0,
+        startedAt: Date.now(),
+        accumulated: paused ? d.accumulated ?? 0 : 0,
         laps: paused ? d.laps ?? [] : [],
       },
     })
@@ -76,7 +84,9 @@ export const StopwatchWidget = memo(function StopwatchWidget({ widgetId }: { wid
     const s = useStore.getState().widgets[widgetId]
     if (!s) return
     const d = getWidgetData<StopwatchData>(s)
-    updateWidget(widgetId, { data: { ...d, running: false, paused: true } })
+    updateWidget(widgetId, {
+      data: { ...d, startedAt: null, accumulated: computeElapsed(d) },
+    })
   }, [updateWidget, widgetId])
 
   const handleReset = useCallback(() => {
@@ -84,7 +94,7 @@ export const StopwatchWidget = memo(function StopwatchWidget({ widgetId }: { wid
     if (!s) return
     const d = getWidgetData<StopwatchData>(s)
     updateWidget(widgetId, {
-      data: { ...d, elapsed: 0, running: false, paused: false, laps: [] },
+      data: { ...d, startedAt: null, accumulated: 0, laps: [] },
     })
   }, [updateWidget, widgetId])
 
@@ -92,12 +102,12 @@ export const StopwatchWidget = memo(function StopwatchWidget({ widgetId }: { wid
     const s = useStore.getState().widgets[widgetId]
     if (!s) return
     const d = getWidgetData<StopwatchData>(s)
-    const currentElapsed = d.elapsed ?? 0
+    const currentElapsed = computeElapsed(d)
     const currentLaps = d.laps ?? []
     updateWidget(widgetId, { data: { ...d, laps: [...currentLaps, currentElapsed] } })
   }, [updateWidget, widgetId])
 
-  const t = formatTime(elapsedRef.current)
+  const t = formatTime(elapsed)
 
   return (
     <div className="flex h-full flex-col p-4">

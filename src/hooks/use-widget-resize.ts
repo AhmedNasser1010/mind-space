@@ -18,6 +18,7 @@ export function useWidgetResize(
   direction: ResizeDirection
 ) {
   const isResizing = useRef(false)
+  const hasResized = useRef(false)
   const startPos = useRef({ x: 0, y: 0 })
   const widgetStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
 
@@ -31,6 +32,7 @@ export function useWidgetResize(
       if (!widget) return
 
       isResizing.current = true
+      hasResized.current = false
       startPos.current = { x: e.clientX, y: e.clientY }
       widgetStart.current = {
         x: widget.x,
@@ -46,6 +48,11 @@ export function useWidgetResize(
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!isResizing.current) return
+
+      if (!hasResized.current) {
+        useStore.getState().recordSnapshot()
+        hasResized.current = true
+      }
 
       const state = useStore.getState()
       const scale = state.canvasState.scale

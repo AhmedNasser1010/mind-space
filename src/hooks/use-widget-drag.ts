@@ -31,6 +31,8 @@ export function useWidgetDrag(widgetId: string) {
       const state = useStore.getState()
 
       if (dragIds.current.length === 0) {
+        useStore.getState().recordSnapshot()
+
         const selectedIds = state.selectedWidgetIds
         dragIds.current =
           selectedIds.includes(widgetId) && selectedIds.length > 1
