@@ -35,6 +35,8 @@ interface StoreState {
 
   addWidget: (sheetId: string, widget: Widget) => void
   updateWidget: (id: string, updates: Partial<Widget>) => void
+  updateWidgetSilent: (id: string, updates: Partial<Widget>) => void
+  recordSnapshot: () => void
   deleteWidget: (sheetId: string, widgetId: string) => void
   deleteWidgets: (sheetId: string, widgetIds: string[]) => void
   moveWidget: (id: string, x: number, y: number) => void
@@ -152,13 +154,22 @@ function initializeDefaultState() {
 const debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {}
 const pendingWrites = new Map<string, string>()
 
+let storageErrorReported = false
+function reportStorageError() {
+  if (storageErrorReported || typeof window === "undefined") return
+  storageErrorReported = true
+  window.dispatchEvent(new CustomEvent("mind-space:storage-error"))
+}
+
 export function flushPendingWrites() {
   for (const [name, value] of pendingWrites) {
     try {
       localStorage.setItem(name, value)
     } catch {
       /* storage full or unavailable */
+      reportStorageError()
     }
+    clearTimeout(debounceTimers[name])
   }
   pendingWrites.clear()
 }
@@ -189,6 +200,7 @@ const debouncedStorage = {
         localStorage.setItem(name, value)
       } catch {
         /* storage full or unavailable */
+        reportStorageError()
       }
     }, 300)
   },
@@ -352,11 +364,16 @@ export const useStore = create<StoreState>()(
       },
 
       reorderSheetWidgets: (sheetId, widgetOrder) => {
-        set((state) => ({
-          sheets: state.sheets.map((s) =>
-            s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
-          ),
-        }))
+        set((state) => {
+          const snapshot = takeSnapshot(state.sheets, state.widgets, state.currentSheetId)
+          return {
+            sheets: state.sheets.map((s) =>
+              s.id === sheetId ? { ...s, widgetOrder, updatedAt: Date.now() } : s
+            ),
+            undoStack: [...state.undoStack, snapshot].slice(-MAX_HISTORY),
+            redoStack: [],
+          }
+        })
       },
 
       addWidget: (sheetId, widget) => {
@@ -393,6 +410,21 @@ export const useStore = create<StoreState>()(
             redoStack: [],
           }
         })
+      },
+
+      updateWidgetSilent: (id, updates) => {
+        set((state) => {
+          const widget = state.widgets[id]
+          if (!widget) return state
+          return { widgets: { ...state.widgets, [id]: { ...widget, ...updates } } }
+        })
+      },
+
+      recordSnapshot: () => {
+        set((state) => ({
+          undoStack: [...state.undoStack, takeSnapshot(state.sheets, state.widgets, state.currentSheetId)].slice(-MAX_HISTORY),
+          redoStack: [],
+        }))
       },
 
       deleteWidgets: (sheetId, widgetIds) => {
@@ -699,7 +731,13 @@ export const useStore = create<StoreState>()(
       undo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (undoStack.length === 0) return
-        const previous: Snapshot = JSON.parse(undoStack[undoStack.length - 1])
+        let previous: Snapshot
+        try {
+          previous = JSON.parse(undoStack[undoStack.length - 1])
+        } catch {
+          set({ undoStack: undoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...previous,
@@ -712,7 +750,13 @@ export const useStore = create<StoreState>()(
       redo: () => {
         const { undoStack, redoStack, sheets, widgets, currentSheetId } = get()
         if (redoStack.length === 0) return
-        const next: Snapshot = JSON.parse(redoStack[redoStack.length - 1])
+        let next: Snapshot
+        try {
+          next = JSON.parse(redoStack[redoStack.length - 1])
+        } catch {
+          set({ redoStack: redoStack.slice(0, -1) })
+          return
+        }
         const currentSnapshot = takeSnapshot(sheets, widgets, currentSheetId)
         set({
           ...next,
@@ -725,14 +769,47 @@ export const useStore = create<StoreState>()(
     {
       name: "mind-space-store",
       storage: createJSONStorage(() => debouncedStorage),
+      version: 2,
+      migrate: (persisted: unknown, version: number) => {
+        const state = persisted as Record<string, unknown>
+        if (version < 1) {
+          // v0 blobs carried full undo/redo history; strip it.
+          delete state.undoStack
+          delete state.redoStack
+        }
+        if (version < 2) {
+          // v1 widgets stored timer/stopwatch progress as tick-decremented
+          // fields; convert to timestamp-based fields. Running timers/
+          // stopwatches become paused at their last known value.
+          const widgets = state.widgets as Record<string, Widget> | undefined
+          if (widgets) {
+            for (const widget of Object.values(widgets)) {
+              if (widget.type === WidgetType.Timer) {
+                const d = widget.data as { duration?: number; remaining?: number } | undefined
+                widget.data = {
+                  duration: d?.duration ?? 300,
+                  endsAt: null,
+                  pausedRemaining: d?.remaining ?? null,
+                }
+              } else if (widget.type === WidgetType.Stopwatch) {
+                const d = widget.data as { elapsed?: number; laps?: number[] } | undefined
+                widget.data = {
+                  startedAt: null,
+                  accumulated: d?.elapsed ?? 0,
+                  laps: d?.laps ?? [],
+                }
+              }
+            }
+          }
+        }
+        return state
+      },
       partialize: (state) => ({
         sheets: state.sheets,
         currentSheetId: state.currentSheetId,
         widgets: state.widgets,
         canvasState: state.canvasState,
         themeSettings: state.themeSettings,
-        undoStack: state.undoStack,
-        redoStack: state.redoStack,
         clipboard: state.clipboard,
       }),
       onRehydrateStorage: () => {

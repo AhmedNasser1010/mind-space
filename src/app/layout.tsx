@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { ToastProvider } from "@/components/ui/toast"
 import { ConfirmProvider } from "@/components/ui/confirm-dialog"
+import { StorageErrorListener } from "@/components/storage-error-listener"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
@@ -35,7 +36,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <ConfirmProvider>
-            <ToastProvider>{children}</ToastProvider>
+            <ToastProvider>
+              <StorageErrorListener />
+              {children}
+            </ToastProvider>
           </ConfirmProvider>
         </ThemeProvider>
         <Analytics />
