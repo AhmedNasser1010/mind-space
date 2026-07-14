@@ -1,7 +1,7 @@
 "use client"
 
 import * as Popover from "@radix-ui/react-popover"
-import { Check, Grid3x3, Circle, Ban, Square, EyeOff, CornerUpLeft, Grid } from "lucide-react"
+import { Check, Grid3x3, Circle, Ban, Square, EyeOff, CornerUpLeft, Grid, Download, Upload } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BACKGROUND_PRESETS } from "@/lib/backgrounds"
 import type { BackgroundPattern, CanvasBackground, ResizeHandleStyle } from "@/types"
@@ -27,6 +27,8 @@ interface BackgroundPickerProps {
   onResizeHandleStyleChange?: (style: ResizeHandleStyle) => void
   snapToGrid?: boolean
   onSnapToGridToggle?: () => void
+  onExport?: () => void
+  onImport?: () => void
   trigger: React.ReactNode
   side?: "top" | "right" | "bottom" | "left"
   align?: "start" | "center" | "end"
@@ -40,6 +42,8 @@ export function BackgroundPicker({
   onResizeHandleStyleChange,
   snapToGrid,
   onSnapToGridToggle,
+  onExport,
+  onImport,
   trigger,
   side = "top",
   align = "end",
@@ -165,6 +169,34 @@ export function BackgroundPicker({
                     {option.label}
                   </button>
                 ))}
+              </div>
+            </>
+          )}
+
+          {(onExport || onImport) && (
+            <>
+              <div className="h-px bg-border my-3" />
+              <div className="flex gap-2">
+                {onExport && (
+                  <button
+                    type="button"
+                    onClick={onExport}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-input py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    <Download className="size-3.5" />
+                    Export
+                  </button>
+                )}
+                {onImport && (
+                  <button
+                    type="button"
+                    onClick={onImport}
+                    className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-input py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  >
+                    <Upload className="size-3.5" />
+                    Import
+                  </button>
+                )}
               </div>
             </>
           )}

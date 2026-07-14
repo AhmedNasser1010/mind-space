@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { useConfirm } from "@/components/ui/confirm-dialog"
 import { toast } from "sonner"
 import { buildBackup, downloadBackup, parseBackup } from "@/lib/backup"
-import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Paintbrush, Download, Upload } from "lucide-react"
+import { ZoomIn, ZoomOut, RotateCcw, Maximize2, Cog } from "lucide-react"
 import { AddWidgetButton } from "./add-widget-button"
 import { BackgroundPicker } from "./background-picker"
 
@@ -198,22 +198,15 @@ export const ZoomControls = memo(function ZoomControls() {
         onResizeHandleStyleChange={setResizeHandleStyle}
         snapToGrid={snapToGrid}
         onSnapToGridToggle={toggleSnapToGrid}
+        onExport={exportBackup}
+        onImport={triggerImport}
         trigger={
-          <IconButton label="Canvas background" size="md">
-            <Paintbrush className="h-4 w-4" />
+          <IconButton label="Preferences" size="md">
+            <Cog className="h-4 w-4" />
           </IconButton>
         }
       />
 
-      <div className="h-px bg-border mx-1" />
-
-      <IconButton label="Export backup" size="md" onClick={exportBackup}>
-        <Download className="h-4 w-4" />
-      </IconButton>
-
-      <IconButton label="Import backup" size="md" onClick={triggerImport}>
-        <Upload className="h-4 w-4" />
-      </IconButton>
       <input
         ref={fileInputRef}
         type="file"
