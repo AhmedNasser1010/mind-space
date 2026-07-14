@@ -640,7 +640,7 @@ export const useStore = create<StoreState>()(
             updatedAt: now,
           }
           const sheets = [...state.sheets, sheet]
-          const currentSheetId = state.currentSheetId ?? sheet.id
+          const currentSheetId = sheet.id
           return {
             sheets,
             currentSheetId,
