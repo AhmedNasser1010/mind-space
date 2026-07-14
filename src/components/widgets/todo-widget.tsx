@@ -5,7 +5,7 @@ import { useStore } from "@/store"
 import { cn } from "@/lib/utils"
 import { getWidgetData } from "@/lib/widget-utils"
 import { neighborsForDrop, type DropTarget } from "@/lib/list-reorder"
-import { InlineInput } from "@/components/ui/icon-button"
+import { InlineTextarea } from "@/components/ui/icon-button"
 import { GripVertical, Trash2, Check, Clock3, ChevronRight } from "lucide-react"
 import type { ListItem } from "@/types"
 
@@ -33,7 +33,7 @@ interface TodoRowProps {
   onToggleStatus: (id: string) => void
   onDelete: (id: string) => void
   onHandlePointerDown: (e: React.PointerEvent, id: string) => void
-  editInputRef: React.RefObject<HTMLInputElement | null>
+  editInputRef: React.RefObject<HTMLTextAreaElement | null>
 }
 
 const TodoRow = memo(function TodoRow({
@@ -112,7 +112,7 @@ const TodoRow = memo(function TodoRow({
       </button>
 
       {isEditing ? (
-        <InlineInput
+        <InlineTextarea
           inputRef={editInputRef}
           value={editValue}
           onChange={onEditValueChange}
@@ -121,13 +121,13 @@ const TodoRow = memo(function TodoRow({
           onBlur={onSaveEdit}
           onPointerDown={(e) => e.stopPropagation()}
           autoFocus
-          className="h-6 flex-1 min-w-0 border-input/60 text-xs"
+          className="flex-1 min-w-0 border-input/60 text-xs"
         />
       ) : (
         <button
           onClick={() => onStartEdit(item)}
           className={cn(
-            "flex-1 min-w-0 rounded px-1 -mx-1 text-left text-xs leading-relaxed whitespace-normal break-words transition-colors hover:bg-background/70",
+            "flex-1 min-w-0 rounded px-1 -mx-1 text-left text-xs leading-relaxed whitespace-pre-wrap break-words transition-colors hover:bg-background/70",
             status === "done" && "line-through text-muted-foreground",
             status === "progress" && "text-amber-600 dark:text-amber-400"
           )}
@@ -168,8 +168,8 @@ export const TodoWidget = memo(function TodoWidget({ widgetId }: { widgetId: str
   const [fadeTop, setFadeTop] = useState(false)
   const [fadeBottom, setFadeBottom] = useState(false)
 
-  const addInputRef = useRef<HTMLInputElement>(null)
-  const editInputRef = useRef<HTMLInputElement>(null)
+  const addInputRef = useRef<HTMLTextAreaElement>(null)
+  const editInputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const completionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   const dragState = useRef({
@@ -505,7 +505,7 @@ export const TodoWidget = memo(function TodoWidget({ widgetId }: { widgetId: str
         )}
       </div>
 
-      <InlineInput
+      <InlineTextarea
         inputRef={addInputRef}
         value={newTodoText}
         onChange={setNewTodoText}

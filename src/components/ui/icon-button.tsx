@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef } from "react"
+import { forwardRef, useCallback, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import type { ReactNode, ButtonHTMLAttributes } from "react"
 
@@ -124,6 +124,76 @@ export function InlineInput({
       }}
       onPointerDown={onPointerDown}
       autoFocus={autoFocus}
+    />
+  )
+}
+
+interface TextareaProps {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  onEnter?: () => void
+  onEscape?: () => void
+  onBlur?: () => void
+  onPointerDown?: (e: React.PointerEvent) => void
+  autoFocus?: boolean
+  className?: string
+  inputRef?: React.RefObject<HTMLTextAreaElement | null>
+}
+
+export function InlineTextarea({
+  value,
+  onChange,
+  placeholder,
+  onEnter,
+  onEscape,
+  onBlur,
+  onPointerDown,
+  autoFocus,
+  className,
+  inputRef,
+}: TextareaProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const resize = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${el.scrollHeight}px`
+  }, [])
+
+  useEffect(() => {
+    resize()
+  }, [value, resize])
+
+  return (
+    <textarea
+      ref={(el) => {
+        textareaRef.current = el
+        if (inputRef) {
+          ;(inputRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = el
+        }
+      }}
+      rows={1}
+      placeholder={placeholder}
+      className={cn(
+        "min-h-[1.75rem] w-full resize-none overflow-hidden rounded-md border border-input bg-background px-2 py-0.5 text-xs leading-relaxed focus:outline-none focus:ring-1 focus:ring-ring",
+        className
+      )}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onBlur={onBlur}
+      onPointerDown={onPointerDown}
+      autoFocus={autoFocus}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey && onEnter) {
+          e.preventDefault()
+          onEnter()
+        }
+        if (e.key === "Escape" && onEscape) {
+          onEscape()
+        }
+      }}
     />
   )
 }
