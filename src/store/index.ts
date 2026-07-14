@@ -266,7 +266,7 @@ export function __resetPendingSnapshotForTests() {
   pendingSnapshot = null
 }
 
-export const PERSIST_VERSION = 9
+export const PERSIST_VERSION = 10
 
 export function migratePersistedState(persisted: unknown, version: number): unknown {
   const state = persisted as Record<string, unknown>
@@ -402,6 +402,21 @@ export function migratePersistedState(persisted: unknown, version: number): unkn
     // v8 blobs never had direction on sheets or widgets. The fields are
     // optional and default to LTR, so no mutation needed — the no-op
     // migration just ensures Zustand re-hydrates with the new schema.
+  }
+  if (version < 10) {
+    // v9 blobs had a single global canvasState. Seed each sheet's
+    // per-sheet viewState from that global value so existing users
+    // don't lose their current viewport.
+    const canvasState = state.canvasState as CanvasState | undefined
+    const sheets = state.sheets as Sheet[] | undefined
+    if (sheets && canvasState) {
+      const vs = { offsetX: canvasState.offsetX, offsetY: canvasState.offsetY, scale: canvasState.scale }
+      for (const sheet of sheets) {
+        if (!sheet.viewState) {
+          sheet.viewState = vs
+        }
+      }
+    }
   }
   return state
 }
@@ -658,7 +673,24 @@ export const useStore = create<StoreState>()(
       },
 
       setCurrentSheet: (id) => {
-        set({ currentSheetId: id, selectedWidgetIds: [] })
+        set((state) => {
+          const { offsetX, offsetY, scale } = state.canvasState
+          const sheets = state.sheets.map((s) => {
+            if (s.id === state.currentSheetId) {
+              return { ...s, viewState: { offsetX, offsetY, scale } }
+            }
+            if (s.id === id) {
+              return s
+            }
+            return s
+          })
+          const target = sheets.find((s) => s.id === id)
+          const vs = target?.viewState
+          const canvasState = vs
+            ? { ...state.canvasState, offsetX: vs.offsetX, offsetY: vs.offsetY, scale: vs.scale }
+            : state.canvasState
+          return { currentSheetId: id, selectedWidgetIds: [], sheets, canvasState }
+        })
       },
 
       updateSheet: (id, updates) => {
@@ -1199,13 +1231,26 @@ export const useStore = create<StoreState>()(
       },
 
       setCanvasState: (newState) => {
-        set((prev) => ({
-          canvasState: { ...prev.canvasState, ...newState },
-        }))
+        set((prev) => {
+          const canvasState = { ...prev.canvasState, ...newState }
+          const sheets = (newState.offsetX !== undefined || newState.offsetY !== undefined || newState.scale !== undefined)
+            ? prev.sheets.map((s) =>
+                s.id === prev.currentSheetId
+                  ? { ...s, viewState: { offsetX: canvasState.offsetX, offsetY: canvasState.offsetY, scale: canvasState.scale } }
+                  : s
+              )
+            : prev.sheets
+          return { canvasState, sheets }
+        })
       },
 
       resetCanvasView: () => {
-        set({ canvasState: defaultCanvasState })
+        set((prev) => {
+          const sheets = prev.sheets.map((s) =>
+            s.id === prev.currentSheetId ? { ...s, viewState: undefined } : s
+          )
+          return { canvasState: defaultCanvasState, sheets }
+        })
       },
 
       setCanvasAnimating: (v) => {

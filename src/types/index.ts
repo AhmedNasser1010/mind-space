@@ -65,6 +65,7 @@ export interface Sheet {
   updatedAt: number
   background?: Partial<CanvasBackground>
   direction?: TextDirection
+  viewState?: { offsetX: number; offsetY: number; scale: number }
 }
 
 export interface CanvasState {
