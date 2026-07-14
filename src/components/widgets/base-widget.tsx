@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState, useMemo, memo } from "react"
 import { useStore } from "@/store"
-import { cn } from "@/lib/utils"
+import { cn, getEffectiveDirection } from "@/lib/utils"
 import { useWidgetDrag } from "@/hooks/use-widget-drag"
 import { useTheme } from "@/components/theme-provider"
 import { getThemeVariables } from "@/lib/widget-colors"
@@ -31,6 +31,7 @@ export const BaseWidget = memo(function BaseWidget({
   const pendingDeselect = useRef<{ x: number; y: number } | null>(null)
 
   const widget = useStore((s) => s.widgets[widgetId])
+  const sheet = useStore((s) => s.sheets.find((sh) => sh.id === s.currentSheetId))
   const isSelected = useStore((s) => s.selectedWidgetIds.includes(widgetId))
   const isEntering = useStore((s) => s.enteringWidgetIds.includes(widgetId))
   const isExiting = useStore((s) => s.exitingWidgetIds.includes(widgetId))
@@ -46,6 +47,11 @@ export const BaseWidget = memo(function BaseWidget({
   const themeVars = useMemo(
     () => getThemeVariables(widget?.colorTheme, resolvedTheme === "dark"),
     [widget?.colorTheme, resolvedTheme]
+  )
+
+  const effectiveDir = useMemo(
+    () => getEffectiveDirection(widget?.direction, sheet?.direction),
+    [widget?.direction, sheet?.direction],
   )
 
   const handlePointerDown = useCallback(
@@ -117,6 +123,7 @@ export const BaseWidget = memo(function BaseWidget({
   return (
     <WidgetContextMenu widgetId={widgetId} onStartRename={handleStartRename}>
       <div
+        dir={effectiveDir}
         className={cn(
           "absolute rounded-xl border bg-card text-card-foreground shadow-sm select-none group flex flex-col",
           isSelected && "shadow-md",

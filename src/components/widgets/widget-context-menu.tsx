@@ -3,7 +3,7 @@
 import { memo, useEffect, useState } from "react"
 import { ContextMenu } from "@base-ui/react/context-menu"
 import { useStore } from "@/store"
-import { Copy, Trash2, Palette, ChevronRight, Pencil } from "lucide-react"
+import { Copy, Trash2, Palette, ChevronRight, Pencil, Languages, Check } from "lucide-react"
 import { WidgetColorPalette } from "./widget-color-palette"
 
 interface WidgetContextMenuProps {
@@ -30,6 +30,7 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
   )
   const count = useStore((s) => s.selectedWidgetIds.length)
   const widget = useStore((s) => s.widgets[widgetId])
+  const sheetDirection = useStore((s) => s.sheets.find((sh) => sh.id === s.currentSheetId)?.direction ?? "ltr")
 
   // Base UI's ContextMenu.Root has no `modal` prop (unlike Menu.Root), so it
   // never locks pointer-events outside the menu the way Radix does. Without
@@ -54,6 +55,16 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
       s.updateWidgets(s.selectedWidgetIds, { colorTheme })
     } else {
       s.updateWidget(widgetId, { colorTheme })
+    }
+    setOpen(false)
+  }
+
+  function applyDirection(direction: "ltr" | "rtl" | undefined) {
+    const s = useStore.getState()
+    if (isMulti) {
+      s.updateWidgets(s.selectedWidgetIds, { direction })
+    } else {
+      s.updateWidget(widgetId, { direction })
     }
     setOpen(false)
   }
@@ -120,6 +131,47 @@ export const WidgetContextMenu = memo(function WidgetContextMenu({
                 </ContextMenu.Positioner>
               </ContextMenu.Portal>
             </ContextMenu.SubmenuRoot>
+            {!isMulti && (
+              <ContextMenu.SubmenuRoot>
+                <ContextMenu.SubmenuTrigger className={itemClass} openOnHover>
+                  <Languages className="h-3.5 w-3.5" />
+                  Direction
+                  <ChevronRight className="h-3.5 w-3.5 ml-auto" />
+                </ContextMenu.SubmenuTrigger>
+                <ContextMenu.Portal>
+                  <ContextMenu.Positioner
+                    side="right"
+                    alignOffset={-4}
+                    sideOffset={-4}
+                    onPointerDown={blockCanvasGestures}
+                  >
+                    <ContextMenu.Popup className={popupClass}>
+                      <ContextMenu.Item
+                        className={itemClass}
+                        onClick={() => applyDirection(undefined)}
+                      >
+                        <Check className={widget.direction === undefined ? "h-3.5 w-3.5" : "h-3.5 w-3.5 invisible"} />
+                        Sheet default ({sheetDirection.toUpperCase()})
+                      </ContextMenu.Item>
+                      <ContextMenu.Item
+                        className={itemClass}
+                        onClick={() => applyDirection("ltr")}
+                      >
+                        <Check className={widget.direction === "ltr" ? "h-3.5 w-3.5" : "h-3.5 w-3.5 invisible"} />
+                        LTR
+                      </ContextMenu.Item>
+                      <ContextMenu.Item
+                        className={itemClass}
+                        onClick={() => applyDirection("rtl")}
+                      >
+                        <Check className={widget.direction === "rtl" ? "h-3.5 w-3.5" : "h-3.5 w-3.5 invisible"} />
+                        RTL
+                      </ContextMenu.Item>
+                    </ContextMenu.Popup>
+                  </ContextMenu.Positioner>
+                </ContextMenu.Portal>
+              </ContextMenu.SubmenuRoot>
+            )}
             <ContextMenu.Separator className="h-px bg-border my-1" />
             <ContextMenu.Item className={destructiveItemClass} onClick={remove}>
               <Trash2 className="h-3.5 w-3.5" />

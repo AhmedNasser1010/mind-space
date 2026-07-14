@@ -18,7 +18,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { BackgroundPicker } from "@/components/canvas/background-picker";
 import { useTheme } from "@/components/theme-provider";
 import { resolveBackgroundColor } from "@/lib/backgrounds";
-import type { CanvasBackground } from "@/types";
+import type { CanvasBackground, TextDirection } from "@/types";
 import {
   Plus,
   Pencil,
@@ -28,12 +28,14 @@ import {
   ChevronRight,
   ChevronDown,
   Paintbrush,
+  Languages,
 } from "lucide-react";
 
 type Sheet = {
   id: string;
   title: string;
   background?: Partial<CanvasBackground>;
+  direction?: TextDirection;
 };
 
 interface SheetTabItemProps {
@@ -49,6 +51,7 @@ interface SheetTabItemProps {
   onDelete: (id: string) => void;
   onSetSheetBackground: (id: string, background: Partial<CanvasBackground>) => void;
   onResetSheetBackground: (id: string) => void;
+  onSetSheetDirection: (id: string, direction: TextDirection) => void;
   onPointerDown: (e: React.PointerEvent, sheetId: string) => void;
   inputRef: RefObject<HTMLInputElement | null>;
   editValue: string;
@@ -67,6 +70,7 @@ const SheetTabItem = memo(function SheetTabItem({
   onDelete,
   onSetSheetBackground,
   onResetSheetBackground,
+  onSetSheetDirection,
   onPointerDown,
   inputRef,
   editValue,
@@ -287,6 +291,18 @@ const SheetTabItem = memo(function SheetTabItem({
                     }
                   />
                 </div>
+                <button
+                  role="menuitem"
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSetSheetDirection(sheet.id, sheet.direction === "rtl" ? "ltr" : "rtl");
+                    setActionsOpen(false);
+                  }}
+                >
+                  <Languages className="size-3.5" />
+                  Direction: {sheet.direction === "rtl" ? "RTL" : "LTR"}
+                </button>
                 <div className="h-px bg-border my-1" />
                 <button
                   role="menuitem"
@@ -321,6 +337,7 @@ export const SheetSidebar = memo(function SheetSidebar() {
   const reorderSheets = useStore((s) => s.reorderSheets);
   const canvasBackground = useStore((s) => s.canvasBackground);
   const setSheetBackground = useStore((s) => s.setSheetBackground);
+  const setSheetDirection = useStore((s) => s.setSheetDirection);
 
   const confirm = useConfirm();
 
@@ -444,6 +461,13 @@ export const SheetSidebar = memo(function SheetSidebar() {
       setSheetBackground(id, null);
     },
     [setSheetBackground],
+  );
+
+  const handleSetSheetDirection = useCallback(
+    (id: string, direction: TextDirection) => {
+      setSheetDirection(id, direction);
+    },
+    [setSheetDirection],
   );
 
   const clearDragState = useCallback(() => {
@@ -579,6 +603,7 @@ export const SheetSidebar = memo(function SheetSidebar() {
               onDelete={handleDelete}
               onSetSheetBackground={handleSetSheetBackground}
               onResetSheetBackground={handleResetSheetBackground}
+              onSetSheetDirection={handleSetSheetDirection}
               onPointerDown={handleTabPointerDown}
               inputRef={inputRef}
               editValue={editValue}

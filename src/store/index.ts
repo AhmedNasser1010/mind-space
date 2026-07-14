@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
-import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings, type CanvasBackground, type ResizeHandleStyle, type List, type ListItem, type ListItemStatus } from "@/types"
+import { WidgetType, type Sheet, type Widget, type CanvasState, type ThemeSettings, type CanvasBackground, type ResizeHandleStyle, type TextDirection, type List, type ListItem, type ListItemStatus } from "@/types"
 import { diffForHistory, applyHistoryEntry, isValidHistoryEntry, type HistoryEntry, type HistoryTrio } from "@/lib/history-diff"
 import { quantize } from "@/lib/geometry"
 import { orderKeyBetween } from "@/lib/order-key"
@@ -210,6 +210,7 @@ interface StoreState {
 
   setCanvasBackground: (background: Partial<CanvasBackground>) => void
   setSheetBackground: (sheetId: string, background: Partial<CanvasBackground> | null) => void
+  setSheetDirection: (sheetId: string, direction: TextDirection) => void
   setResizeHandleStyle: (style: ResizeHandleStyle) => void
 
   setThemeSettings: (settings: Partial<ThemeSettings>) => void
@@ -265,7 +266,7 @@ export function __resetPendingSnapshotForTests() {
   pendingSnapshot = null
 }
 
-export const PERSIST_VERSION = 8
+export const PERSIST_VERSION = 9
 
 export function migratePersistedState(persisted: unknown, version: number): unknown {
   const state = persisted as Record<string, unknown>
@@ -396,6 +397,11 @@ export function migratePersistedState(persisted: unknown, version: number): unkn
     if (canvasState && canvasState.snapToGrid === undefined) {
       canvasState.snapToGrid = false
     }
+  }
+  if (version < 9) {
+    // v8 blobs never had direction on sheets or widgets. The fields are
+    // optional and default to LTR, so no mutation needed — the no-op
+    // migration just ensures Zustand re-hydrates with the new schema.
   }
   return state
 }
@@ -1224,6 +1230,14 @@ export const useStore = create<StoreState>()(
                       : { ...s.background, ...background },
                 }
               : s
+          ),
+        }))
+      },
+
+      setSheetDirection: (sheetId, direction) => {
+        set((prev) => ({
+          sheets: prev.sheets.map((s) =>
+            s.id === sheetId ? { ...s, direction } : s
           ),
         }))
       },

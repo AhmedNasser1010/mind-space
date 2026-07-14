@@ -23,6 +23,7 @@ export interface Widget {
   collapsed: boolean
   data: Record<string, unknown>
   colorTheme?: string
+  direction?: TextDirection
 }
 
 export interface List {
@@ -46,6 +47,8 @@ export interface ListItem {
 
 export type BackgroundPattern = "grid" | "dots" | "none"
 
+export type TextDirection = "ltr" | "rtl"
+
 export type ResizeHandleStyle = "corners" | "invisible" | "brackets"
 
 export interface CanvasBackground {
@@ -61,6 +64,7 @@ export interface Sheet {
   createdAt: number
   updatedAt: number
   background?: Partial<CanvasBackground>
+  direction?: TextDirection
 }
 
 export interface CanvasState {

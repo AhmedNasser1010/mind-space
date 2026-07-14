@@ -127,7 +127,7 @@ const TodoRow = memo(function TodoRow({
         <button
           onClick={() => onStartEdit(item)}
           className={cn(
-            "flex-1 min-w-0 rounded px-1 -mx-1 text-left text-xs leading-relaxed whitespace-pre-wrap break-words transition-colors hover:bg-background/70",
+            "flex-1 min-w-0 rounded px-1 -mx-1 text-start text-xs leading-relaxed whitespace-pre-wrap break-words transition-colors hover:bg-background/70",
             status === "done" && "line-through text-muted-foreground",
             status === "progress" && "text-amber-600 dark:text-amber-400"
           )}
