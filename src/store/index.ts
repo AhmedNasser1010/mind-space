@@ -265,7 +265,7 @@ export function __resetPendingSnapshotForTests() {
   pendingSnapshot = null
 }
 
-export const PERSIST_VERSION = 7
+export const PERSIST_VERSION = 8
 
 export function migratePersistedState(persisted: unknown, version: number): unknown {
   const state = persisted as Record<string, unknown>
@@ -389,6 +389,14 @@ export function migratePersistedState(persisted: unknown, version: number): unkn
     delete state.undoStack
     delete state.redoStack
   }
+  if (version < 8) {
+    // v7 blobs never had snapToGrid in CanvasState (it was removed in v5);
+    // default it back to on for the restored toggle.
+    const canvasState = state.canvasState as Partial<CanvasState> | undefined
+    if (canvasState && canvasState.snapToGrid === undefined) {
+      canvasState.snapToGrid = false
+    }
+  }
   return state
 }
 
@@ -420,6 +428,7 @@ const defaultCanvasState: CanvasState = {
   scale: 1,
   gridSize: 20,
   snapToObjects: true,
+  snapToGrid: false,
 }
 
 const defaultCanvasBackground: CanvasBackground = {
@@ -912,10 +921,11 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const widget = state.widgets[id]
           if (!widget) return state
+          const snap = state.canvasState.snapToGrid
           const grid = state.canvasState.gridSize
           const widgets = {
             ...state.widgets,
-            [id]: { ...widget, x: quantize(x, grid), y: quantize(y, grid) },
+            [id]: { ...widget, x: snap ? quantize(x, grid) : x, y: snap ? quantize(y, grid) : y },
           }
           if (!pendingSnapshot) {
             return { widgets }
@@ -929,12 +939,13 @@ export const useStore = create<StoreState>()(
 
       moveWidgets: (moves) => {
         set((state) => {
+          const snap = state.canvasState.snapToGrid
           const grid = state.canvasState.gridSize
           const widgets = { ...state.widgets }
           for (const { id, x, y } of moves) {
             const widget = widgets[id]
             if (!widget) continue
-            widgets[id] = { ...widget, x: quantize(x, grid), y: quantize(y, grid) }
+            widgets[id] = { ...widget, x: snap ? quantize(x, grid) : x, y: snap ? quantize(y, grid) : y }
           }
           if (!pendingSnapshot) {
             return { widgets }

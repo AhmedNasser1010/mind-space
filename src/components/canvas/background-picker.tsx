@@ -1,7 +1,7 @@
 "use client"
 
 import * as Popover from "@radix-ui/react-popover"
-import { Check, Grid3x3, Circle, Ban, Square, EyeOff, CornerUpLeft } from "lucide-react"
+import { Check, Grid3x3, Circle, Ban, Square, EyeOff, CornerUpLeft, Grid } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { BACKGROUND_PRESETS } from "@/lib/backgrounds"
 import type { BackgroundPattern, CanvasBackground, ResizeHandleStyle } from "@/types"
@@ -25,6 +25,8 @@ interface BackgroundPickerProps {
   onReset?: () => void
   resizeHandleStyle?: ResizeHandleStyle
   onResizeHandleStyleChange?: (style: ResizeHandleStyle) => void
+  snapToGrid?: boolean
+  onSnapToGridToggle?: () => void
   trigger: React.ReactNode
   side?: "top" | "right" | "bottom" | "left"
   align?: "start" | "center" | "end"
@@ -36,6 +38,8 @@ export function BackgroundPicker({
   onReset,
   resizeHandleStyle,
   onResizeHandleStyleChange,
+  snapToGrid,
+  onSnapToGridToggle,
   trigger,
   side = "top",
   align = "end",
@@ -132,6 +136,35 @@ export function BackgroundPicker({
                     </button>
                   )
                 })}
+              </div>
+            </>
+          )}
+
+          {onSnapToGridToggle && (
+            <>
+              <div className="text-xs font-medium text-muted-foreground mt-3 mb-2">Snap to grid</div>
+              <div className="flex gap-1 rounded-md bg-muted p-0.5">
+                {[
+                  { label: "On", value: true },
+                  { label: "Off", value: false },
+                ].map((option) => (
+                  <button
+                    key={option.label}
+                    type="button"
+                    onClick={() => {
+                      if (snapToGrid !== option.value) onSnapToGridToggle()
+                    }}
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1 rounded-sm py-1 text-xs transition-colors",
+                      snapToGrid === option.value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Grid className="size-3.5" />
+                    {option.label}
+                  </button>
+                ))}
               </div>
             </>
           )}

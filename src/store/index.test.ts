@@ -416,7 +416,7 @@ describe("migratePersistedState", () => {
     expect(migrated.canvasState.snapToObjects).toBe(false)
   })
 
-  it("quantizes off-grid widget geometry and strips snapToGrid when migrating a v4 blob", () => {
+  it("quantizes off-grid widget geometry and migrates snapToGrid when migrating a v4 blob", () => {
     const persisted = {
       canvasState: { offsetX: 0, offsetY: 0, scale: 1, gridEnabled: true, snapToGrid: true, gridSize: 20, snapToObjects: true },
       widgets: {
@@ -431,7 +431,7 @@ describe("migratePersistedState", () => {
     expect(migrated.widgets.w1.y).toBe(160)
     expect(migrated.widgets.w1.width).toBe(300)
     expect(migrated.widgets.w1.height).toBe(280)
-    expect(migrated.canvasState.snapToGrid).toBeUndefined()
+    expect(migrated.canvasState.snapToGrid).toBe(true)
   })
 
   it("clamps a quantized width/height below the minimum back up to MIN_WIDTH/MIN_HEIGHT", () => {

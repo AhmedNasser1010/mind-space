@@ -68,6 +68,7 @@ export interface CanvasState {
   scale: number
   gridSize: number
   snapToObjects: boolean
+  snapToGrid: boolean
 }
 
 export interface ThemeSettings {

@@ -49,6 +49,7 @@ export const ZoomControls = memo(function ZoomControls() {
   const setCanvasBackground = useStore((s) => s.setCanvasBackground)
   const resizeHandleStyle = useStore((s) => s.resizeHandleStyle)
   const setResizeHandleStyle = useStore((s) => s.setResizeHandleStyle)
+  const snapToGrid = useStore((s) => s.canvasState.snapToGrid)
   const importState = useStore((s) => s.importState)
   const confirm = useConfirm()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -107,6 +108,10 @@ export const ZoomControls = memo(function ZoomControls() {
     animateCanvas()
     setCanvasState({ scale, offsetX, offsetY })
   }, [setCanvasState])
+
+  const toggleSnapToGrid = useCallback(() => {
+    setCanvasState({ snapToGrid: !snapToGrid })
+  }, [snapToGrid, setCanvasState])
 
   const exportBackup = useCallback(() => {
     const { sheets, widgets, currentSheetId } = useStore.getState()
@@ -191,6 +196,8 @@ export const ZoomControls = memo(function ZoomControls() {
         onChange={setCanvasBackground}
         resizeHandleStyle={resizeHandleStyle}
         onResizeHandleStyleChange={setResizeHandleStyle}
+        snapToGrid={snapToGrid}
+        onSnapToGridToggle={toggleSnapToGrid}
         trigger={
           <IconButton label="Canvas background" size="md">
             <Paintbrush className="h-4 w-4" />
