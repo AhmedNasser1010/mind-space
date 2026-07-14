@@ -146,6 +146,7 @@ function hoistTodoClipboardData(
       order,
       tags: item.tags ?? [],
       createdAt: Date.now(),
+      progressAt: item.status === "progress" ? Date.now() : undefined,
       completedAt: item.status === "done" ? Date.now() : undefined,
     }
   }
@@ -379,6 +380,7 @@ export function migratePersistedState(persisted: unknown, version: number): unkn
             order,
             tags: [],
             createdAt: 0,
+            progressAt: status === "progress" ? 0 : undefined,
             completedAt: status === "done" ? 0 : undefined,
           }
         }
@@ -1472,6 +1474,7 @@ export const useStore = create<StoreState>()(
           const updated: ListItem = {
             ...item,
             status: nextStatus,
+            progressAt: nextStatus === "progress" ? Date.now() : undefined,
             completedAt: nextStatus === "done" ? Date.now() : undefined,
           }
           const listItems = { ...state.listItems, [id]: updated }

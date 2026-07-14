@@ -42,6 +42,7 @@ export interface ListItem {
   order: string
   tags: string[]
   createdAt: number
+  progressAt?: number
   completedAt?: number
 }
 

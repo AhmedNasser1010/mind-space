@@ -19,6 +19,28 @@ const DRAG_THRESHOLD_SQ = 25
 const AUTOSCROLL_EDGE_PX = 32
 const AUTOSCROLL_SPEED = 8
 
+function formatTimestamp(ts?: number): string {
+  if (!ts) return ""
+  const d = new Date(ts)
+  return (
+    d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) +
+    " " +
+    d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+  )
+}
+
+function formatDuration(fromTs: number, toTs: number): string {
+  const ms = toTs - fromTs
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return "<1m"
+  if (mins < 60) return `${mins}m`
+  const hrs = Math.floor(mins / 60)
+  const remMins = mins % 60
+  if (hrs < 24) return remMins > 0 ? `${hrs}h ${remMins}m` : `${hrs}h`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ${hrs % 24}h`
+}
+
 interface TodoRowProps {
   item: ListItem
   isDragging: boolean
@@ -124,17 +146,27 @@ const TodoRow = memo(function TodoRow({
           className="flex-1 min-w-0 border-input/60 text-xs"
         />
       ) : (
-        <button
-          onClick={() => onStartEdit(item)}
-          className={cn(
-            "flex-1 min-w-0 rounded px-1 -mx-1 text-start text-xs leading-relaxed whitespace-pre-wrap break-words transition-colors hover:bg-background/70",
-            status === "done" && "line-through text-muted-foreground",
-            status === "progress" && "text-amber-600 dark:text-amber-400"
-          )}
-          title="Click to edit"
-        >
-          {item.text}
-        </button>
+        <div className="flex-1 min-w-0">
+          <button
+            onClick={() => onStartEdit(item)}
+            className={cn(
+              "w-full rounded px-1 -mx-1 text-start text-xs leading-relaxed whitespace-pre-wrap break-words transition-colors hover:bg-background/70",
+              status === "done" && "line-through text-muted-foreground",
+              status === "progress" && "text-amber-600 dark:text-amber-400"
+            )}
+            title="Click to edit"
+          >
+            {item.text}
+          </button>
+          <div className="text-[9px] text-muted-foreground/60 mt-0.5 flex gap-2 flex-wrap px-1">
+            <span>Added {formatTimestamp(item.createdAt)}</span>
+            {item.progressAt && (
+              <span className="font-medium">
+                ⏱ {formatDuration(item.progressAt, item.completedAt ?? Date.now())}
+              </span>
+            )}
+          </div>
+        </div>
       )}
 
       <button

@@ -675,6 +675,18 @@ describe("cycleListItemStatus", () => {
     expect(useStore.getState().listItems.i1.completedAt).toBeUndefined()
   })
 
+  it("sets progressAt when entering progress and clears it when leaving progress", () => {
+    useStore.setState({ listItems: { i1: makeListItem("i1", "l1", { status: "todo" }) } })
+
+    useStore.getState().cycleListItemStatus("i1")
+    expect(useStore.getState().listItems.i1.status).toBe("progress")
+    expect(useStore.getState().listItems.i1.progressAt).toBeDefined()
+
+    useStore.getState().cycleListItemStatus("i1")
+    expect(useStore.getState().listItems.i1.status).toBe("done")
+    expect(useStore.getState().listItems.i1.progressAt).toBeUndefined()
+  })
+
   it("each cycle is one undo entry; undo restores the previous status", () => {
     useStore.setState({ listItems: { i1: makeListItem("i1", "l1", { status: "todo" }) } })
     useStore.getState().cycleListItemStatus("i1")
