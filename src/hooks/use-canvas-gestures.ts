@@ -142,7 +142,7 @@ export function useCanvasGestures(containerRef: React.RefObject<HTMLDivElement |
       )
       const state = canvasStateRef.current
       const newScale = Math.min(
-        Math.max(state.scale * (dist / initialPinchDist.current), 0.1),
+        Math.max(state.scale * Math.pow(dist / initialPinchDist.current, 0.4), 0.1),
         5,
       )
       const scaleChange = newScale / state.scale
