@@ -9,6 +9,7 @@ import { ExternalLink, Edit3, Check, X } from "lucide-react"
 
 interface QuickLinkData {
   url: string
+  title?: string
 }
 
 export const QuickLinkWidget = memo(function QuickLinkWidget({ widgetId }: { widgetId: string }) {
@@ -16,10 +17,12 @@ export const QuickLinkWidget = memo(function QuickLinkWidget({ widgetId }: { wid
   const updateWidget = useStore((s) => s.updateWidget)
   const [editing, setEditing] = useState(false)
   const [urlInput, setUrlInput] = useState("")
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [titleInput, setTitleInput] = useState("")
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   const data = useMemo(() => getWidgetData<QuickLinkData>(widget), [widget])
   const url = data.url ?? ""
+  const title = data.title ?? ""
 
   const handleOpen = useCallback(() => {
     if (url && safeHostname(url)) window.open(normalizeUrl(url), "_blank", "noopener,noreferrer")
@@ -28,40 +31,53 @@ export const QuickLinkWidget = memo(function QuickLinkWidget({ widgetId }: { wid
   const handleStartEdit = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
     setUrlInput(url)
+    setTitleInput(title)
     setEditing(true)
-    requestAnimationFrame(() => inputRef.current?.select())
-  }, [url])
+    requestAnimationFrame(() => titleInputRef.current?.focus())
+  }, [url, title])
 
   const handleFinishEdit = useCallback(() => {
-    const trimmed = urlInput.trim()
-    updateWidget(widgetId, { data: { url: trimmed } })
+    const trimmedUrl = urlInput.trim()
+    const trimmedTitle = titleInput.trim()
+    updateWidget(widgetId, { data: { url: trimmedUrl, title: trimmedTitle || undefined } })
     setEditing(false)
-  }, [urlInput, updateWidget, widgetId])
+  }, [urlInput, titleInput, updateWidget, widgetId])
 
   const favicon = useMemo(() => url ? getFaviconUrl(url) : "", [url])
   const hostname = url ? safeHostname(url) : null
+  const displayName = title || hostname
 
   return (
     <div className="flex h-full flex-col p-4">
       {editing ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2">
           <InlineInput
-            inputRef={inputRef}
-            value={urlInput}
-            onChange={setUrlInput}
-            placeholder="https://example.com"
+            inputRef={titleInputRef}
+            value={titleInput}
+            onChange={setTitleInput}
+            placeholder="Title (optional)"
             onEnter={handleFinishEdit}
             onEscape={() => setEditing(false)}
-            onBlur={handleFinishEdit}
             onPointerDown={(e) => e.stopPropagation()}
             autoFocus
           />
-          <IconButton label="Save" onClick={handleFinishEdit} size="sm">
-            <Check className="h-3.5 w-3.5" />
-          </IconButton>
-          <IconButton label="Cancel" onClick={() => setEditing(false)} size="sm">
-            <X className="h-3.5 w-3.5" />
-          </IconButton>
+          <div className="flex items-center gap-2">
+            <InlineInput
+              value={urlInput}
+              onChange={setUrlInput}
+              placeholder="https://example.com"
+              onEnter={handleFinishEdit}
+              onEscape={() => setEditing(false)}
+              onBlur={handleFinishEdit}
+              onPointerDown={(e) => e.stopPropagation()}
+            />
+            <IconButton label="Save" onClick={handleFinishEdit} size="sm">
+              <Check className="h-3.5 w-3.5" />
+            </IconButton>
+            <IconButton label="Cancel" onClick={() => setEditing(false)} size="sm">
+              <X className="h-3.5 w-3.5" />
+            </IconButton>
+          </div>
         </div>
       ) : (
         <div className="relative flex-1 flex group/link">
@@ -87,16 +103,18 @@ export const QuickLinkWidget = memo(function QuickLinkWidget({ widgetId }: { wid
             <div className="text-center">
               <p
                 className="text-xs font-medium truncate max-w-full"
-                title={hostname ?? undefined}
+                title={title ? `${title} (${hostname})` : url || undefined}
               >
-                {hostname ?? (url ? "Invalid URL" : "No URL set")}
+                {displayName ?? (url ? "Invalid URL" : "No URL set")}
               </p>
-              <p
-                className="text-[10px] text-muted-foreground truncate max-w-full"
-                title={url || undefined}
-              >
-                {url || "Click edit to add URL"}
-              </p>
+              {title && hostname && (
+                <p
+                  className="text-[10px] text-muted-foreground truncate max-w-full"
+                  title={url || undefined}
+                >
+                  {hostname}
+                </p>
+              )}
             </div>
           </button>
 
