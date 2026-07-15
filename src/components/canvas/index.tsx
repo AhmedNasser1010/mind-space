@@ -7,6 +7,7 @@ import { ZoomControls } from "./zoom-controls"
 import { CanvasWidget } from "./canvas-widget"
 import { MarqueeOverlay } from "./marquee-overlay"
 import { SnapGuides } from "./snap-guides"
+import { FlexBoxDragOverlay } from "@/components/widgets/flexbox-drag-overlay"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { useCanvasGestures } from "@/hooks/use-canvas-gestures"
 import { LayoutTemplate } from "lucide-react"
@@ -115,6 +116,7 @@ export function Canvas() {
       )}
 
       <ZoomControls />
+      <FlexBoxDragOverlay />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { WidgetType } from "@/types"
 import type { ComponentType } from "react"
 import type { LucideIcon } from "lucide-react"
-import { StickyNote, Type, Timer, Clock, Link, Calendar, CheckSquare, ListTodo, Calculator, Image } from "lucide-react"
+import { StickyNote, Type, Timer, Clock, Link, Calendar, CheckSquare, ListTodo, Calculator, Image, LayoutList } from "lucide-react"
 import { TimerWidget } from "./timer-widget"
 import { StopwatchWidget } from "./stopwatch-widget"
 import { QuickLinkWidget } from "./quick-link-widget"
@@ -12,6 +12,7 @@ import { CounterWidget } from "./counter-widget"
 import { NoteWidget } from "./note-widget"
 import { TextWidget } from "./text-widget"
 import { PhotoWidget } from "./photo-widget"
+import { FlexBoxWidget } from "./flexbox-widget"
 
 export interface WidgetDef {
   type: WidgetType
@@ -113,6 +114,15 @@ export const WIDGET_DEFS: Record<WidgetType, WidgetDef> = {
     defaultTitle: "Photo",
     defaultSize: { width: 320, height: 320 },
     defaultData: {},
+  },
+  [WidgetType.FlexBox]: {
+    type: WidgetType.FlexBox,
+    label: "Flex Box",
+    icon: LayoutList,
+    component: FlexBoxWidget,
+    defaultTitle: "Flex Box",
+    defaultSize: { width: 300, height: 400 },
+    defaultData: { cards: [] },
   },
 }
 

@@ -9,6 +9,7 @@ export enum WidgetType {
   Stopwatch = "stopwatch",
   QuickLink = "quicklink",
   Photo = "photo",
+  FlexBox = "flexbox",
 }
 
 export interface Widget {

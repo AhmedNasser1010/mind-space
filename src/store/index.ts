@@ -198,6 +198,14 @@ interface StoreState {
   toggleCollapse: (id: string) => void
   renameWidget: (id: string, title: string) => void
 
+  moveFlexBoxCard: (
+    sourceWidgetId: string,
+    targetWidgetId: string,
+    cardId: string,
+    beforeCardId: string | null,
+    afterCardId: string | null,
+  ) => void
+
   selectWidget: (id: string) => void
   addToSelection: (id: string) => void
   removeFromSelection: (id: string) => void
@@ -1191,6 +1199,67 @@ export const useStore = create<StoreState>()(
             ...state.widgets,
             [id]: { ...widget, title },
           }
+          return {
+            widgets,
+            ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId, lists: state.lists, listItems: state.listItems }),
+          }
+        })
+      },
+
+      moveFlexBoxCard: (sourceWidgetId, targetWidgetId, cardId, beforeCardId, afterCardId) => {
+        set((state) => {
+          const sourceWidget = state.widgets[sourceWidgetId]
+          const targetWidget = state.widgets[targetWidgetId]
+          if (!sourceWidget || !targetWidget) return state
+
+          const prevTrio = trioOf(state)
+          const sourceCards = [...(((sourceWidget.data as { cards?: Array<{ id: string; content: string; order: string; rows?: number }> }).cards) ?? [])]
+          const cardIndex = sourceCards.findIndex((c) => c.id === cardId)
+          if (cardIndex === -1) return state
+
+          const card = sourceCards[cardIndex]
+          sourceCards.splice(cardIndex, 1)
+
+          let targetCards: Array<{ id: string; content: string; order: string }>
+          if (sourceWidgetId === targetWidgetId) {
+            targetCards = sourceCards
+          } else {
+            targetCards = [...(((targetWidget.data as { cards?: Array<{ id: string; content: string; order: string; rows?: number }> }).cards) ?? [])]
+            const removeIdx = targetCards.findIndex((c) => c.id === cardId)
+            if (removeIdx !== -1) targetCards.splice(removeIdx, 1)
+          }
+
+          const beforeOrder = beforeCardId
+            ? targetCards.find((c) => c.id === beforeCardId)?.order ?? null
+            : null
+          const afterOrder = afterCardId
+            ? targetCards.find((c) => c.id === afterCardId)?.order ?? null
+            : null
+
+          let newOrder: string
+          if (beforeOrder === null && afterOrder === null && targetCards.length > 0) {
+            const lastCard = targetCards[targetCards.length - 1]
+            newOrder = orderKeyBetween(lastCard.order, null)
+          } else {
+            newOrder = orderKeyBetween(beforeOrder, afterOrder)
+          }
+          targetCards.push({ id: card.id, content: card.content, order: newOrder, ...(card.rows != null ? { rows: card.rows } : {}) })
+
+          const widgets = {
+            ...state.widgets,
+            [sourceWidgetId]: {
+              ...sourceWidget,
+              data: { ...sourceWidget.data, cards: sourceCards },
+            },
+          }
+
+          if (sourceWidgetId !== targetWidgetId) {
+            widgets[targetWidgetId] = {
+              ...targetWidget,
+              data: { ...targetWidget.data, cards: targetCards },
+            }
+          }
+
           return {
             widgets,
             ...pushHistoryEntry(state, prevTrio, { sheets: state.sheets, widgets, currentSheetId: state.currentSheetId, lists: state.lists, listItems: state.listItems }),

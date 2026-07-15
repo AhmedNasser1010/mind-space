@@ -15,12 +15,14 @@ interface BaseWidgetProps {
   widgetId: string
   children?: React.ReactNode
   hideTitle?: boolean
+  dataAttributes?: Record<string, string>
 }
 
 export const BaseWidget = memo(function BaseWidget({
   widgetId,
   children,
   hideTitle = false,
+  dataAttributes,
 }: BaseWidgetProps) {
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState("")
@@ -123,6 +125,7 @@ export const BaseWidget = memo(function BaseWidget({
   return (
     <WidgetContextMenu widgetId={widgetId} onStartRename={handleStartRename}>
       <div
+        {...dataAttributes}
         dir={effectiveDir}
         className={cn(
           "absolute rounded-xl border bg-card text-card-foreground shadow-sm select-none group flex flex-col",

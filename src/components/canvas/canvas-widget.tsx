@@ -19,7 +19,11 @@ export const CanvasWidget = memo(function CanvasWidget({ widgetId }: CanvasWidge
 
   return (
     <div data-widget>
-      <BaseWidget widgetId={widgetId} hideTitle={type === "text"}>
+      <BaseWidget
+        widgetId={widgetId}
+        hideTitle={type === "text"}
+        dataAttributes={type === "flexbox" ? { "data-flexbox-id": widgetId } : undefined}
+      >
         {WidgetComponent ? (
           <WidgetComponent widgetId={widgetId} />
         ) : (
