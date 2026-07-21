@@ -183,7 +183,7 @@ export function BackgroundPicker({
                     onClick={onExport}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-input py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                   >
-                    <Download className="size-3.5" />
+                    <Upload className="size-3.5" />
                     Export
                   </button>
                 )}
@@ -193,7 +193,7 @@ export function BackgroundPicker({
                     onClick={onImport}
                     className="flex flex-1 items-center justify-center gap-1.5 rounded-md border border-input py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
                   >
-                    <Upload className="size-3.5" />
+                    <Download className="size-3.5" />
                     Import
                   </button>
                 )}

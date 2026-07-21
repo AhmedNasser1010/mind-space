@@ -1,4 +1,4 @@
-import type { Sheet, Widget } from "@/types"
+import type { List, ListItem, Sheet, Widget } from "@/types"
 import { PERSIST_VERSION } from "@/store"
 
 export interface BackupFile {
@@ -8,12 +8,16 @@ export interface BackupFile {
   sheets: Sheet[]
   widgets: Record<string, Widget>
   currentSheetId: string | null
+  lists: Record<string, List>
+  listItems: Record<string, ListItem>
 }
 
 export function buildBackup(
   sheets: Sheet[],
   widgets: Record<string, Widget>,
-  currentSheetId: string | null
+  currentSheetId: string | null,
+  lists: Record<string, List>,
+  listItems: Record<string, ListItem>
 ): BackupFile {
   return {
     app: "mind-space",
@@ -22,6 +26,8 @@ export function buildBackup(
     sheets,
     widgets,
     currentSheetId,
+    lists,
+    listItems,
   }
 }
 
@@ -92,6 +98,14 @@ export function parseBackup(raw: string): BackupFile {
   const currentSheetId =
     typeof parsed.currentSheetId === "string" ? parsed.currentSheetId : null
 
+  if (!isRecord(parsed.lists)) {
+    throw new Error("Backup file has invalid or missing lists data.")
+  }
+
+  if (!isRecord(parsed.listItems)) {
+    throw new Error("Backup file has invalid or missing listItems data.")
+  }
+
   return {
     app: "mind-space",
     version: parsed.version,
@@ -99,6 +113,8 @@ export function parseBackup(raw: string): BackupFile {
     sheets: cleanedSheets,
     widgets,
     currentSheetId,
+    lists: parsed.lists as Record<string, List>,
+    listItems: parsed.listItems as Record<string, ListItem>,
   }
 }
 

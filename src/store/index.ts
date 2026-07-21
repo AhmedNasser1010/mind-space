@@ -1590,8 +1590,8 @@ export const useStore = create<StoreState>()(
           let sheets = backup.sheets
           let widgets = backup.widgets
           let currentSheetId = backup.currentSheetId
-          let lists: Record<string, List> = {}
-          let listItems: Record<string, ListItem> = {}
+          let lists = backup.lists
+          let listItems = backup.listItems
 
           if (backup.version < PERSIST_VERSION) {
             const migrated = migratePersistedState(
@@ -1607,8 +1607,8 @@ export const useStore = create<StoreState>()(
             sheets = migrated.sheets
             widgets = migrated.widgets
             currentSheetId = migrated.currentSheetId
-            lists = migrated.lists ?? {}
-            listItems = migrated.listItems ?? {}
+            lists = migrated.lists ?? lists
+            listItems = migrated.listItems ?? listItems
           }
 
           const resolvedCurrentSheetId = sheets.some((s) => s.id === currentSheetId)

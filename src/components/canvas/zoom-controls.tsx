@@ -114,8 +114,8 @@ export const ZoomControls = memo(function ZoomControls() {
   }, [snapToGrid, setCanvasState])
 
   const exportBackup = useCallback(() => {
-    const { sheets, widgets, currentSheetId } = useStore.getState()
-    const backup = buildBackup(sheets, widgets, currentSheetId)
+    const { sheets, widgets, currentSheetId, lists, listItems } = useStore.getState()
+    const backup = buildBackup(sheets, widgets, currentSheetId, lists, listItems)
     downloadBackup(backup)
   }, [])
 
